@@ -33,5 +33,10 @@
     "sender": "Nickkklas",
     "ciphertext": "hejsa",
     "timestamp": 1772040702.165944
+  },
+  {
+    "sender": "Lasse",
+    "ciphertext": "virker dette?",
+    "timestamp": 1772042621.9279401
   }
 ]
