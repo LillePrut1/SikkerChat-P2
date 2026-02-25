@@ -263,3 +263,19 @@ h1{
     order: 2;
   }
 }
+
+/* Import Google Fonts */
+@import url("//fonts.googleapis.com/css2?family=Assistant:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&display=swap");
+
+/* Messages */
+#messages{
+ background-color:#000000;
+ background-image:url("https://hips.hearstapps.com/hmg-prod/images/body-builder-actor-and-future-governor-of-california-arnold-news-photo-1708346890.jpg?resize=1800:*");
+ background-size:cover;
+}
+
+/* Message input */
+#messageInput{
+ font-family:'Assistant', sans-serif;
+ transform: rotateZ(-4deg);
+}
