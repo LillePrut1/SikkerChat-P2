@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Secure Chat</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo">🔐</div>
+        <div>
+          <h1>Secure Chat</h1>
+          <p class="subtitle">Lokal udvikling · Flask + Python</p>
+        </div>
+      </div>
+
+      <div class="controls">
+        <label class="field">
+          <span>Brugernavn</span>
+          <input id="username" type="text" placeholder="Skriv dit navn" />
+        </label>
+
+        <button id="themeToggle" class="btn secondary" title="Skift tema">
+          🌗
+        </button>
+      </div>
+    </header>
+
+    <main class="chat-layout">
+      <!-- Sidepanel – klar til chatrooms, status osv. (kan udvides senere) -->
+      <aside class="sidebar">
+        <div class="panel">
+          <h3>Rum</h3>
+          <ul class="room-list" id="roomList">
+            <li class="room active" data-room="general"># general</li>
+            <!-- Flere rum kan tilføjes dynamisk senere -->
+          </ul>
+        </div>
+
+        <div class="panel">
+          <h3>Status</h3>
+          <div id="status" class="status">Forbinder…</div>
+        </div>
+      </aside>
+
+      <!-- Chatområde -->
+      <section class="chat">
+        <div id="messages" class="messages" aria-live="polite"></div>
+
+        <form id="composer" class="composer" autocomplete="off">
+          <input
+            id="messageInput"
+            type="text"
+            placeholder="Skriv en besked og tryk Enter…"
+            aria-label="Besked"
+            required
+          />
+          <button class="btn primary" type="submit" aria-label="Send">
+            Send
+          </button>
+        </form>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <small>Bygget til lokal udvikling · <strong>Flask API:</strong> http://localhost:5000</small>
+    </footer>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Secure Chat</title>
+</head>
+<body>
+
+<h2>Send besked:</h2>
+<input id="msg" placeholder="Skriv besked...">
+<button onclick="sendMessage()">Send</button>
+
+<h2>Chat:</h2>
+<div id="chat"></div>
+
+<script>
+async function sendMessage() {
+    const text = document.getElementById("msg").value;
+
+    await fetch("http://localhost:5000/messages", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            sender: "nicklas",
+            ciphertext: text // senere: krypteret tekst
+        })
+    });
+
+    loadMessages();
+}
+
+async function loadMessages() {
+    const res = await fetch("http://localhost:5000/messages");
+    const msgs = await res.json();
+
+    document.getElementById("chat").innerHTML =
+        msgs.map(m => `<p><b>${m.sender}</b>: ${m.ciphertext}</p>`).join("");
+}
+
+loadMessages();
+</script>
+
+</body>
+</html>

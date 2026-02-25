@@ -1,1 +1,37 @@
-[]
+[
+  {
+    "sender": "nicklas",
+    "ciphertext": "hello",
+    "timestamp": 1772039930.899322
+  },
+  {
+    "sender": "nicklas",
+    "ciphertext": "Dinfarsfisse",
+    "timestamp": 1772039957.171097
+  },
+  {
+    "sender": "nicklas",
+    "ciphertext": "dette er en besked",
+    "timestamp": 1772040077.684087
+  },
+  {
+    "sender": "Lasse",
+    "ciphertext": "Dette er en besked fra lasse",
+    "timestamp": 1772040352.863782
+  },
+  {
+    "sender": "nicklas",
+    "ciphertext": "hva saa",
+    "timestamp": 1772040363.7804291
+  },
+  {
+    "sender": "Lasse",
+    "ciphertext": "heyyyy",
+    "timestamp": 1772040683.937293
+  },
+  {
+    "sender": "Nickkklas",
+    "ciphertext": "hejsa",
+    "timestamp": 1772040702.165944
+  }
+]
