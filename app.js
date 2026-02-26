@@ -11,7 +11,7 @@ const els = {
   roomList: document.getElementById("roomList"),
 };
 
-let currentRoom = "general";
+let currentRoom = "Prototype";
 let isFetching = false;
 let pollTimer = null;
 
