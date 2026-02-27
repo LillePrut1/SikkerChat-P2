@@ -161,13 +161,26 @@ h1{
 
 .chat{
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto 1fr auto;
   background: var(--card);
   border: 1px solid var(--card-border);
   border-radius: 16px;
   overflow: hidden;
   box-shadow: var(--shadow);
   min-height: 60dvh;
+}
+
+.chat-header{
+  padding: 0 16px;
+  border-bottom: 1px solid var(--card-border);
+  display: flex;
+  align-items: center;
+}
+
+.chat-header h2{
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text-dim);
 }
 
 .messages{

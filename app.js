@@ -51,6 +51,7 @@ els.roomList.addEventListener("click", (e) => {
   document.querySelectorAll(".room").forEach(r => r.classList.remove("active"));
   li.classList.add("active");
   currentRoom = li.dataset.room;
+  document.getElementById("currentRoomName").textContent = `# ${currentRoom}`;
   fetchMessages(true);
 });
 
@@ -167,6 +168,7 @@ async function loadRooms(){
     // if current room doesn't exist yet (startup), default to first one
     if(!rooms.includes(currentRoom) && rooms.length) currentRoom = rooms[0];
     renderRoomList(rooms);
+    document.getElementById("currentRoomName").textContent = `# ${currentRoom}`;
   }catch(err){
     console.error("Failed to load rooms", err);
   }
