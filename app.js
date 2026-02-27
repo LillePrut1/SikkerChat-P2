@@ -1,4 +1,4 @@
-const API = "https://sikkerchat-p2.onrender.com";
+const API = "http://localhost:5000";
 const POLL_MS = 3000;
 
 const els = {
