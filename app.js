@@ -9,6 +9,8 @@ const els = {
   composer: document.getElementById("composer"),
   input: document.getElementById("messageInput"),
   roomList: document.getElementById("roomList"),
+  newRoomForm: document.getElementById("newRoomForm"),
+  newRoomInput: document.getElementById("newRoomInput"),
 };
 
 let currentRoom = "Prototype";
@@ -35,15 +37,40 @@ let pollTimer = null;
   });
 })();
 
-// --- Room selection (can be expanded later) ---
+// --- Room list rendering and interaction ---
+function renderRoomList(rooms) {
+  els.roomList.innerHTML = rooms
+    .map(r => `<li class="room${r === currentRoom ? " active" : ""}" data-room="${r}"># ${escapeHtml(r)}</li>`)
+    .join("");
+}
+
+// click handler for switching rooms
 els.roomList.addEventListener("click", (e) => {
   const li = e.target.closest(".room");
   if(!li) return;
   document.querySelectorAll(".room").forEach(r => r.classList.remove("active"));
   li.classList.add("active");
   currentRoom = li.dataset.room;
-  // In future: filter or request room-specific messages
   fetchMessages(true);
+});
+
+// handle creating a new room
+els.newRoomForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = els.newRoomInput.value.trim();
+  if(!name) return;
+  try {
+    setStatus("Opretter rum…");
+    await apiPost("/rooms", { room: name });
+    els.newRoomInput.value = "";
+    currentRoom = name;
+    await loadRooms();
+    await fetchMessages(true);
+    setStatus("Rum oprettet ✔");
+  } catch (err) {
+    console.error(err);
+    setStatus("Kunne ikke oprette rum", true);
+  }
 });
 
 // --- Composer submit ---
@@ -76,7 +103,8 @@ async function fetchMessages(scrollToEnd=false){
   isFetching = true;
   try{
     setStatus("Opdaterer…");
-    const msgs = await apiGet("/messages");
+    // request only the current room's messages from the server
+    const msgs = await apiGet(`/messages?room=${encodeURIComponent(currentRoom)}`);
     renderMessages(msgs, scrollToEnd);
     setStatus("Forbundet ✔");
   }catch(err){
@@ -132,6 +160,18 @@ function setStatus(text, isError=false){
   els.status.style.color = isError ? "var(--danger)" : "var(--text-dim)";
 }
 
+// load available rooms from server
+async function loadRooms(){
+  try{
+    const rooms = await apiGet("/rooms");
+    // if current room doesn't exist yet (startup), default to first one
+    if(!rooms.includes(currentRoom) && rooms.length) currentRoom = rooms[0];
+    renderRoomList(rooms);
+  }catch(err){
+    console.error("Failed to load rooms", err);
+  }
+}
+
 // --- Simple API wrappers ---
 async function apiGet(path){
   const res = await fetch(API + path, { headers: { "Accept": "application/json" }});
@@ -149,8 +189,9 @@ async function apiPost(path, body){
   return res.json();
 }
 
-// Start polling
+// Start polling and initialise UI
 (async function init(){
+  await loadRooms();
   await fetchMessages(true);
   pollTimer = setInterval(fetchMessages, POLL_MS);
 })();

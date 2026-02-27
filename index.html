@@ -40,9 +40,12 @@
       <aside class="sidebar">
         <div class="panel">
           <h3>Rum</h3>
+          <form id="newRoomForm" class="new-room-form" autocomplete="off">
+            <input id="newRoomInput" type="text" placeholder="Nyt rum" aria-label="Nyt rum" />
+            <button class="btn" type="submit" aria-label="Opret rum">+</button>
+          </form>
           <ul class="room-list" id="roomList">
-            <li class="room active" data-room="Prototype"># Prototype-Rum</li>
-            <!-- Flere rum kan tilføjes dynamisk senere -->
+            <!-- Rooms will be populated dynamically by JavaScript -->
           </ul>
         </div>
 

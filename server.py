@@ -53,7 +53,11 @@ def register():
 # ----------------------
 @app.get("/messages")
 def get_messages():
+    # optionally filter by room via query param
+    room = request.args.get("room")
     messages = load_json("data/messages.json")
+    if room:
+        messages = [m for m in messages if m.get("room") == room]
     return jsonify(messages)
 
 
@@ -68,7 +72,9 @@ def add_message():
     msg = {
         "sender": data.get("sender", "Unknown"),
         "ciphertext": data.get("ciphertext", ""),
-        "timestamp": time.time()
+        "timestamp": time.time(),
+        # room allows multiple chatrooms; default to Prototype if not supplied
+        "room": data.get("room", "Prototype")
     }
 
     messages.append(msg)
@@ -76,6 +82,52 @@ def add_message():
 
     return jsonify({"message": "Message stored!"}), 201
 
+
+# ----------------------
+# Rooms endpoints (persistent list)
+# ----------------------
+
+# we keep a simple JSON array of room names. if the file is missing we
+# treat it as an empty list. rooms are separate from messages so that
+# clients can create a room before posting a message in it.
+ROOMS_FILE = "data/rooms.json"
+
+@app.get("/rooms")
+def get_rooms():
+    # load stored rooms and also include any rooms that appear in
+    # messages just in case someone posted directly to the API.
+    try:
+        rooms = load_json(ROOMS_FILE)
+    except FileNotFoundError:
+        rooms = []
+
+    # merge in from messages to keep backwards compatibility
+    messages = load_json("data/messages.json")
+    for m in messages:
+        r = m.get("room", "Prototype")
+        if r and r not in rooms:
+            rooms.append(r)
+
+    return jsonify(sorted(rooms))
+
+@app.post("/rooms")
+def add_room():
+    data = request.json
+    name = (data.get("room") or "").strip()
+    if not name:
+        return jsonify({"error": "Missing room name"}), 400
+
+    try:
+        rooms = load_json(ROOMS_FILE)
+    except FileNotFoundError:
+        rooms = []
+
+    if name in rooms:
+        return jsonify({"error": "Room already exists"}), 409
+
+    rooms.append(name)
+    save_json(ROOMS_FILE, rooms)
+    return jsonify({"message": "Room created"}), 201
 
 # ----------------------
 # Start server (Specificeret till Render)
