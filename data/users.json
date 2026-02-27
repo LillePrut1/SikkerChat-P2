@@ -1,22 +1,37 @@
 [
   {
-    "username": "nicklas",
-    "password_hash": "$2b$12$pG7teUs8s/jdehWJMZZqleu0Ryvko/9kv8zr2rR1wrDG7P.G2oOnu"
-  },
-  {
-    "username": "yosef",
-    "password_hash": "$2b$12$pG7teUs8s/jdehWJMZZqleu0Ryvko/9kv8zr2rR1wrDG7P.G2oOnu"
-  },
-  {
-    "username": "ali",
-    "password_hash": "$2b$12$pG7teUs8s/jdehWJMZZqleu0Ryvko/9kv8zr2rR1wrDG7P.G2oOnu"
-  },
-  {
-    "username": "owe",
-    "password_hash": "$2b$12$pG7teUs8s/jdehWJMZZqleu0Ryvko/9kv8zr2rR1wrDG7P.G2oOnu"
-  },
-  {
-    "username": "aske",
-    "password_hash": "$2b$12$pG7teUs8s/jdehWJMZZqleu0Ryvko/9kv8zr2rR1wrDG7P.G2oOnu"
+    "username": "Nicklas",
+    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
   }
+
+,
+
+ {  
+   "username": "Yosef",
+    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+  }
+
+,
+
+  { 
+      "username": "Ali",
+    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+  }
+
+,
+
+{  
+   "username": "Owe",
+    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+  }
+
+
+,
+
+{   
+  "username": "Aske",
+    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+  }
+
+
 ]
