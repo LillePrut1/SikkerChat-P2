@@ -1,7 +1,27 @@
 [
-    {
+  {
     "sender": "Nicklas",
-    "ciphertext": "Husk at vælge dit navn/brugernavn, inden du sender beskeder!",
+    "ciphertext": "Husk at v\u00c3\u00a6lge dit navn/brugernavn, inden du sender beskeder!",
     "timestamp": 1772042621.9279401
+  },
+  {
+    "sender": "Nicklas",
+    "ciphertext": "hallo",
+    "timestamp": 1772208186.9866664
+  },
+  {
+    "sender": "Nicklas",
+    "ciphertext": "Virker dette?",
+    "timestamp": 1772208204.9208875
+  },
+  {
+    "sender": "Nick",
+    "ciphertext": "m\u00e5ske",
+    "timestamp": 1772208216.8136163
+  },
+  {
+    "sender": "owe",
+    "ciphertext": "hva faen",
+    "timestamp": 1772208735.5532467
   }
 ]

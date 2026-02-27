@@ -1,8 +1,10 @@
-const API = "https://sikkerchat-p2.onrender.com";
+const API = "http://localhost:5000";
 const POLL_MS = 3000;
 
 const els = {
   username: document.getElementById("username"),
+  password: document.getElementById("password"),
+  loginBtn: document.getElementById("loginBtn"),
   themeToggle: document.getElementById("themeToggle"),
   messages: document.getElementById("messages"),
   status: document.getElementById("status"),
@@ -148,6 +150,25 @@ async function apiPost(path, body){
   if(!res.ok) throw new Error(`POST ${path} -> ${res.status}`);
   return res.json();
 }
+
+// --- Login button ---
+els.loginBtn.addEventListener("click", async () => {
+  const username = els.username.value.trim();
+  const password = els.password.value;
+  if(!username || !password){
+    setStatus("Udfyld brugernavn og kodeord", true);
+    return;
+  }
+  try{
+    setStatus("Logger ind…");
+    const res = await apiPost("/login", { username, password });
+    setStatus(res.message || "Logget ind ✔");
+    els.password.value = "";
+  }catch(err){
+    console.error(err);
+    setStatus("Login fejlede", true);
+  }
+});
 
 // Start polling
 (async function init(){
