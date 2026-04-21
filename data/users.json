@@ -2,36 +2,26 @@
   {
     "username": "Nicklas",
     "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
-  }
-
-,
-
- {  
-   "username": "Yosef",
+  },
+  {
+    "username": "Yosef",
     "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
-  }
-
-,
-
-  { 
-      "username": "Ali",
+  },
+  {
+    "username": "Ali",
     "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
-  }
-
-,
-
-{  
-   "username": "Owe",
+  },
+  {
+    "username": "Owe",
     "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
-  }
-
-
-,
-
-{   
-  "username": "Aske",
+  },
+  {
+    "username": "Aske",
     "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+  },
+  {
+    "username": "nick",
+    "password_hash": "$2b$12$gb1vTg2nrnJVKMrzjAcGvO2hL80qZt4ti/jgdDpOcB31jMwpX3U3W",
+    "temp_token": "jwaev8WqHvzqS3ng9xlX4J4Y-0q2y0EaCjg5hsrF8WI"
   }
-
-
 ]

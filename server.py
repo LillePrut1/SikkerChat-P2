@@ -3,6 +3,8 @@ from flask_cors import CORS
 import json
 import bcrypt
 import time
+import secrets  # Added for token generation
+import os  # Added for file checks
 
 app = Flask(__name__)
 CORS(app)
@@ -47,35 +49,104 @@ def register():
 
     return jsonify({"message": "User registered!"}), 201
 
-
 # ----------------------
-# Get all messages
+# Updated get messages (now uses query params for group)
 # ----------------------
 @app.get("/messages")
-def get_messages():
-    messages = load_json("data/messages.json")
-    return jsonify(messages)
-
+def get_message():
+    user = check_token()
+    if not user:
+        return jsonify({"error": "Invalid token"}), 401
+    groupname = request.args.get("group")
+    if not groupname:
+        return jsonify({"error": "Missing group"}), 400
+    group = check_group_membership(user)
+    if not group or group[0] != groupname:
+        return jsonify({"error": "Du er ikke medlem af denne gruppe"}), 403
+    _, groupkey = group
+    messages = load_json(f"data/groups/{groupname}.json")
+    return jsonify({"messages": messages["messages"], "group_key": groupkey}), 200
 
 # ----------------------
-# Add new message
+# Updated add message (expects group and temp_token)
 # ----------------------
 @app.post("/messages")
-def add_message():
-    messages = load_json("data/messages.json")
-    data = request.json
+def post_message():
+    data = request.get_json()
+    ciphertext = data.get("ciphertext")
+    groupname = data.get("group")
+    user = check_token()
+    if not user:
+        return jsonify({"error": "Invalid token"}), 401
+    group = check_group_membership(user)
+    if not group or group[0] != groupname:
+        return jsonify({"error": "Du er ikke medlem af denne gruppe"}), 403
+    messages = load_json(f"data/groups/{groupname}.json")
+    messages["messages"].append({"ciphertext": ciphertext, "timestamp": int(time.time()), "sender": user})
+    save_json(f"data/groups/{groupname}.json", messages)
+    return jsonify({"message": "Besked modtaget"}), 200
 
-    msg = {
-        "sender": data.get("sender", "Unknown"),
-        "ciphertext": data.get("ciphertext", ""),
-        "timestamp": time.time()
-    }
+# ----------------------
+# New functions added from backup
+# ----------------------
+def check_token():
+    data = request.get_json()
+    token = data.get("temp_token")
+    users = load_json("data/users.json")
+    user = None
+    for u in users:
+        if u.get("temp_token") == token:
+            user = u["username"]
+            break
+    if user is None:
+        return None
+    return user
 
-    messages.append(msg)
-    save_json("data/messages.json", messages)
+def check_group_membership(user):
+    data = request.get_json()
+    groupname = data.get("group")
+    memberships = load_json(f"data/usergroup/{user}.json")
+    groupkey = next((x["groupkey"] for x in memberships if x["groupname"] == groupname), None)
+    if groupkey:
+        return groupname, groupkey
+    return None
 
-    return jsonify({"message": "Message stored!"}), 201
+@app.post("/login")
+def login():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    password_bytes = password.encode("utf-8")
+    users = load_json("data/users.json")
+    user_data = next((u for u in users if u["username"] == username), None)
+    if not user_data or not bcrypt.checkpw(password_bytes, user_data["password_hash"].encode()):
+        return jsonify({"error": "Username or password wrong"}), 401
+    token = secrets.token_urlsafe(32)
+    user_data["temp_token"] = token
+    save_json("data/users.json", users)
+    return jsonify({"message": "Login successful", "token": token}), 200
 
+@app.get("/rooms")
+def get_rooms():
+    user = check_token()
+    if not user:
+        return jsonify({"error": "Invalid token"}), 401
+    user_rooms = load_json(f"data/usergroup/{user}.json")
+    groups = [item["groupname"] for item in user_rooms]
+    return jsonify({"groups": groups}), 200
+
+@app.post("/group_add")
+def group_add():
+    user = check_token()
+    if not user:
+        return jsonify({"error": "Invalid token"}), 401
+    data = request.get_json()
+    groupname = data.get("groupname")
+    if os.path.exists(f"data/groups/{groupname}.json"):
+        return jsonify({"error": "Group already exists"}), 400
+    initial_data = {"members": [user], "admin": [user], "messages": []}
+    save_json(f"data/groups/{groupname}.json", initial_data)
+    return jsonify({"message": "Group created"}), 200
 
 # ----------------------
 # Start server (Specificeret till Render)

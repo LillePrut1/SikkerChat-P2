@@ -1,4 +1,4 @@
-const API = "https://sikkerchat-p2.onrender.com";
+const API = "http://localhost:5000";  // Changed to local server
 const POLL_MS = 3000;
 
 const els = {
@@ -11,7 +11,8 @@ const els = {
   roomList: document.getElementById("roomList"),
 };
 
-let currentRoom = "Prototype";
+let currentRoom = null;
+let token = localStorage.getItem("token");
 let isFetching = false;
 let pollTimer = null;
 
@@ -27,39 +28,63 @@ let pollTimer = null;
   });
 })();
 
-// --- Username persistence ---
-(function initUsername(){
-  els.username.value = localStorage.getItem("username") || "";
-  els.username.addEventListener("change", () => {
-    localStorage.setItem("username", els.username.value.trim());
-  });
-})();
+// --- Auth handling ---
+async function ensureAuth() {
+  if (!token) {
+    const action = prompt("Enter 'login' or 'register'");
+    const username = prompt("Username:");
+    const password = prompt("Password:");
+    try {
+      const res = await apiPost(`/${action}`, { username, password });
+      token = res.token;
+      localStorage.setItem("token", token);
+      localStorage.setItem("username", username);
+      els.username.value = username;
+    } catch (err) {
+      alert("Auth failed: " + err.message);
+      return false;
+    }
+  }
+  return true;
+}
 
-// --- Room selection (can be expanded later) ---
+// --- Room handling ---
+async function loadRooms() {
+  try {
+    const rooms = await apiGet("/rooms");
+    els.roomList.innerHTML = rooms.groups.map(room => `<li class="room" data-room="${room}">${room}</li>`).join("");
+    if (!currentRoom && rooms.groups.length > 0) {
+      currentRoom = rooms.groups[0];
+      document.querySelector(`[data-room="${currentRoom}"]`).classList.add("active");
+    }
+  } catch (err) {
+    console.error("Failed to load rooms:", err);
+  }
+}
+
+// --- Room selection ---
 els.roomList.addEventListener("click", (e) => {
   const li = e.target.closest(".room");
   if(!li) return;
   document.querySelectorAll(".room").forEach(r => r.classList.remove("active"));
   li.classList.add("active");
   currentRoom = li.dataset.room;
-  // In future: filter or request room-specific messages
   fetchMessages(true);
 });
 
 // --- Composer submit ---
 els.composer.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const sender = (els.username.value || "Anon").trim();
+  if (!await ensureAuth() || !currentRoom) return;
   const text = els.input.value.trim();
   if(!text) return;
 
   try{
     setStatus("Sender…");
     await apiPost("/messages", {
-      sender,
-      // midlertidigt sender vi plaintext i ciphertext-feltet (E2EE kommer senere)
-      ciphertext: text,
-      room: currentRoom
+      ciphertext: text,  // Placeholder for E2EE
+      group: currentRoom,
+      temp_token: token
     });
     els.input.value = "";
     await fetchMessages(true);
@@ -72,12 +97,12 @@ els.composer.addEventListener("submit", async (e) => {
 
 // --- Fetch messages loop ---
 async function fetchMessages(scrollToEnd=false){
-  if(isFetching) return;
+  if(isFetching || !currentRoom) return;
   isFetching = true;
   try{
     setStatus("Opdaterer…");
-    const msgs = await apiGet("/messages");
-    renderMessages(msgs, scrollToEnd);
+    const msgs = await apiGet(`/messages?group=${encodeURIComponent(currentRoom)}`);
+    renderMessages(msgs.messages, scrollToEnd);
     setStatus("Forbundet ✔");
   }catch(err){
     console.error(err);
@@ -88,11 +113,8 @@ async function fetchMessages(scrollToEnd=false){
 }
 
 function renderMessages(msgs, scrollToEnd=false){
-  // (Valgfrit) filtrer per room, hvis du gemmer room i backend
-  const filtered = msgs.filter(m => !m.room || m.room === currentRoom);
-
-  els.messages.innerHTML = filtered.map(m => {
-    const me = (els.username.value || "Anon").trim();
+  els.messages.innerHTML = msgs.map(m => {
+    const me = localStorage.getItem("username") || "Anon";
     const isMe = m.sender === me;
     const time = new Date((m.timestamp || Date.now()) * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     const safeText = escapeHtml(m.ciphertext ?? "");
@@ -112,7 +134,6 @@ function renderMessages(msgs, scrollToEnd=false){
   if(scrollToEnd){
     els.messages.scrollTop = els.messages.scrollHeight;
   }else{
-    // auto-scroll hvis vi allerede er tæt på bunden
     const atBottom = els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 40;
     if(atBottom) els.messages.scrollTop = els.messages.scrollHeight;
   }
@@ -134,7 +155,13 @@ function setStatus(text, isError=false){
 
 // --- Simple API wrappers ---
 async function apiGet(path){
-  const res = await fetch(API + path, { headers: { "Accept": "application/json" }});
+  const res = await fetch(API + path, { 
+    headers: { 
+      "Accept": "application/json",
+      "Content-Type": "application/json"
+    },
+    body: token ? JSON.stringify({ temp_token: token }) : undefined
+  });
   if(!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
   return res.json();
 }
@@ -149,8 +176,11 @@ async function apiPost(path, body){
   return res.json();
 }
 
-// Start polling
+// Start app
 (async function init(){
-  await fetchMessages(true);
-  pollTimer = setInterval(fetchMessages, POLL_MS);
+  if (await ensureAuth()) {
+    await loadRooms();
+    await fetchMessages(true);
+    pollTimer = setInterval(fetchMessages, POLL_MS);
+  }
 })();
