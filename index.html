@@ -1,81 +1,377 @@
 <!DOCTYPE html>
-<html lang="da">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Secure Chat</title>
-  <link rel="stylesheet" href="./styles.css" />
-</head>
-<body>
-  <div class="app">
-    <header class="app-header">
-      <div class="brand">
-        <div class="logo">🔐</div>
-        <div>
-          <h1>P2 Sikker gruppechat</h1>
-          <p class="subtitle">Vibe-Kodet af Nick · Flask + Python</p>
-        </div>
-      </div>
+<!-- Root HTML document - declares this as an HTML5 document -->
+<html lang="en">
+  <!-- Language set to English for accessibility -->
+  <head>
+    <!-- Head section contains metadata and document configuration -->
+    <meta charset="UTF-8" />
+    <!-- Character encoding set to UTF-8 for proper text rendering -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Viewport settings for responsive design on mobile devices -->
+    <title>SikkerChat - Secure Group Chat</title>
+    <!-- Page title displayed in browser tab -->
+    <link rel="stylesheet" href="styles.css" />
+    <!-- Link to external CSS stylesheet for styling -->
+  </head>
 
-      <div class="controls">
-        <label class="field">
-          <span>Brugernavn</span>
-          <input id="username" type="text" placeholder="Skriv dit navn" />
-        </label>
+  <body>
+    <!-- Main body element containing all visible page content -->
 
-         <label class="field">
-          <span>Adgangskode</span>
-          <input id="password" type="password" placeholder="Skriv din adgangskode" />
-        </label>
-        
+    <!-- ========== AUTH SCREEN (LOGIN/REGISTER) ========== -->
+    <!-- Container that displays login and registration interface, hidden after authentication -->
+    <div id="authScreen" class="auth-screen">
+      <!-- Auth screen wrapper with visibility toggled by JavaScript -->
 
-        <button id="themeToggle" class="btn secondary" title="Skift tema">
-          🌗
-        </button>
-      </div>
-    </header>
+      <div class="auth-container">
+        <!-- Centered container for authentication forms -->
 
-    <main class="chat-layout">
-      <!-- Sidepanel – klar til chatrooms, status osv. (kan udvides senere) -->
-      <aside class="sidebar">
-        <div class="panel">
-          <h3>Rum</h3>
-          <ul class="room-list" id="roomList">
-            <li class="room active" data-room="Prototype"># Prototype-Rum</li>
-            <!-- Flere rum kan tilføjes dynamisk senere -->
-          </ul>
+        <h1 class="app-title">SikkerChat</h1>
+        <!-- Main application title/branding -->
+
+        <div class="auth-tabs">
+          <!-- Tab buttons to switch between login and register forms -->
+
+          <button id="loginTabBtn" class="tab-button active" data-tab="login">
+            <!-- Button to switch to login form, marked as active by default -->
+            Login
+          </button>
+
+          <button id="registerTabBtn" class="tab-button" data-tab="register">
+            <!-- Button to switch to register form -->
+            Register
+          </button>
         </div>
 
-        <div class="panel">
-          <h3>Status</h3>
-          <div id="status" class="status">Forbinder…</div>
-        </div>
-      </aside>
+        <!-- ===== LOGIN FORM ===== -->
+        <!-- Form for existing users to log in, visible by default -->
+        <form id="loginForm" class="auth-form active" data-form="login">
+          <!-- Form element with ID for JavaScript access, initially active -->
 
-      <!-- Chatområde -->
-      <section class="chat">
-        <div id="messages" class="messages" aria-live="polite"></div>
+          <div class="form-group">
+            <!-- Wrapper for form input and label -->
 
-        <form id="composer" class="composer" autocomplete="off">
-          <input
-            id="messageInput"
-            type="text"
-            placeholder="Skriv en besked og tryk Enter…"
-            aria-label="Besked"
-            required
-          />
-          <button class="btn primary" type="submit" aria-label="Send">
-            Send
+            <label for="loginUsername">Username</label>
+            <!-- Label associated with login username input for accessibility -->
+
+            <input
+              id="loginUsername"
+              type="text"
+              name="username"
+              placeholder="Enter your username"
+              required
+            />
+            <!-- Text input for username, required field, placeholder text for user guidance -->
+          </div>
+
+          <div class="form-group">
+            <!-- Wrapper for form input and label -->
+
+            <label for="loginPassword">Password</label>
+            <!-- Label associated with login password input for accessibility -->
+
+            <input
+              id="loginPassword"
+              type="password"
+              name="password"
+              placeholder="Enter your password"
+              required
+            />
+            <!-- Password input field with masked characters, required field -->
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="loginBtn">
+            <!-- Submit button for login form -->
+            Login
           </button>
         </form>
-      </section>
-    </main>
 
-    <footer class="app-footer">
-      <small>Bygget til P2 projekt · <strong>HUSK NICK!! Database er gemt hos:</strong> https://sikkerchat-p2.onrender.com</small>
-    </footer>
-  </div>
+        <!-- ===== REGISTER FORM ===== -->
+        <!-- Form for new users to create an account, hidden by default -->
+        <form id="registerForm" class="auth-form" data-form="register">
+          <!-- Form element with ID for JavaScript access, hidden initially -->
 
-  <script src="./app.js"></script>
-</body>
+          <div class="form-group">
+            <!-- Wrapper for form input and label -->
+
+            <label for="registerUsername">Username</label>
+            <!-- Label associated with register username input for accessibility -->
+
+            <input
+              id="registerUsername"
+              type="text"
+              name="username"
+              placeholder="Choose a username"
+              required
+            />
+            <!-- Text input for new username, required field -->
+          </div>
+
+          <div class="form-group">
+            <!-- Wrapper for form input and label -->
+
+            <label for="registerPassword">Password</label>
+            <!-- Label associated with register password input for accessibility -->
+
+            <input
+              id="registerPassword"
+              type="password"
+              name="password"
+              placeholder="Create a password"
+              required
+            />
+            <!-- Password input field for new account, required field -->
+          </div>
+
+          <div class="form-group">
+            <!-- Wrapper for form input and label -->
+
+            <label for="registerConfirmPassword">Confirm Password</label>
+            <!-- Label associated with password confirmation input for accessibility -->
+
+            <input
+              id="registerConfirmPassword"
+              type="password"
+              name="confirmPassword"
+              placeholder="Confirm your password"
+              required
+            />
+            <!-- Password confirmation input to verify password entry matches -->
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="registerBtn">
+            <!-- Submit button for register form -->
+            Register
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ========== DASHBOARD (MAIN CHAT INTERFACE) ========== -->
+    <!-- Main dashboard visible after successful authentication, hidden by default -->
+    <div id="dashboard" class="dashboard">
+      <!-- Dashboard wrapper with main application layout, initially hidden -->
+
+      <!-- ===== TOP NAVBAR ===== -->
+      <!-- Navigation bar at the top of dashboard -->
+      <nav class="navbar">
+        <!-- Navigation bar containing user info and logout -->
+
+        <div class="navbar-left">
+          <!-- Left side of navbar -->
+          <h2 class="navbar-title">SikkerChat</h2>
+          <!-- Application title in navbar -->
+        </div>
+
+        <div class="navbar-right">
+          <!-- Right side of navbar with user info and actions -->
+
+          <span id="currentUsername" class="current-user">
+            <!-- Displays logged-in username, populated by JavaScript -->
+          </span>
+
+          <button id="logoutBtn" class="btn btn-secondary">
+            <!-- Button to log out current user -->
+            Logout
+          </button>
+        </div>
+      </nav>
+
+      <div class="dashboard-container">
+        <!-- Main layout container with sidebar and main content -->
+
+        <!-- ===== LEFT SIDEBAR ===== -->
+        <!-- Sidebar containing chat and group list -->
+        <aside class="sidebar">
+          <!-- Sidebar element containing navigation and chat list -->
+
+          <div class="sidebar-header">
+            <!-- Header section of sidebar -->
+
+            <h3>Chats / Groups</h3>
+            <!-- Title for chats and groups section -->
+          </div>
+
+          <div id="chatList" class="chat-list">
+            <!-- Container for list of chats and groups, dynamically populated by JavaScript -->
+
+            <p class="empty-state">No groups or chats</p>
+            <!-- Placeholder text shown when no chats exist -->
+          </div>
+        </aside>
+
+        <!-- ===== MAIN CONTENT AREA ===== -->
+        <!-- Right side containing chat view or empty state -->
+        <main class="main-content">
+          <!-- Main content area with chat interface -->
+
+          <!-- ===== CHAT HEADER ===== -->
+          <!-- Header showing current chat/group name and controls -->
+          <div id="chatHeader" class="chat-header">
+            <!-- Header section showing selected chat information, hidden when no chat selected -->
+
+            <h2 id="chatName" class="chat-name">
+              <!-- Displays name of selected chat or group, populated by JavaScript -->
+            </h2>
+
+            <div class="chat-header-actions">
+              <!-- Action buttons in chat header -->
+
+              <button id="deleteChatBtn" class="btn btn-danger btn-small">
+                <!-- Button to delete current chat or leave group -->
+                Delete Chat
+              </button>
+            </div>
+          </div>
+
+          <!-- ===== CONTROL PANEL ===== -->
+          <!-- Panel with buttons to create groups and add friends -->
+          <div id="controlPanel" class="control-panel">
+            <!-- Container for control buttons, visible when no chat selected -->
+
+            <h3>Options</h3>
+            <!-- Section title for available actions -->
+
+            <button id="addFriendBtn" class="btn btn-primary">
+              <!-- Button to open add friend interface -->
+              Add Friend
+            </button>
+
+            <button id="createGroupBtn" class="btn btn-primary">
+              <!-- Button to open create group interface -->
+              Create Group
+            </button>
+
+            <!-- ===== ADD FRIEND FORM ===== -->
+            <!-- Form to add a new friend, hidden by default -->
+            <div id="addFriendForm" class="form-section hidden">
+              <!-- Container for add friend form, hidden initially -->
+
+              <h4>Add Friend</h4>
+              <!-- Subheading for add friend section -->
+
+              <div class="form-group">
+                <!-- Wrapper for form input and label -->
+
+                <label for="friendUsername">Friend's Username</label>
+                <!-- Label for friend username input -->
+
+                <input
+                  id="friendUsername"
+                  type="text"
+                  placeholder="Enter friend's username"
+                />
+                <!-- Input field for friend's username -->
+              </div>
+
+              <button id="confirmAddFriendBtn" class="btn btn-primary btn-small">
+                <!-- Button to confirm adding friend -->
+                Add Friend
+              </button>
+
+              <button id="cancelAddFriendBtn" class="btn btn-secondary btn-small">
+                <!-- Button to cancel adding friend and close form -->
+                Cancel
+              </button>
+            </div>
+
+            <!-- ===== CREATE GROUP FORM ===== -->
+            <!-- Form to create a new group, hidden by default -->
+            <div id="createGroupForm" class="form-section hidden">
+              <!-- Container for create group form, hidden initially -->
+
+              <h4>Create Group</h4>
+              <!-- Subheading for create group section -->
+
+              <div class="form-group">
+                <!-- Wrapper for form input and label -->
+
+                <label for="groupName">Group Name</label>
+                <!-- Label for group name input -->
+
+                <input
+                  id="groupName"
+                  type="text"
+                  placeholder="Enter group name"
+                />
+                <!-- Input field for new group name -->
+              </div>
+
+              <div class="form-group">
+                <!-- Wrapper for form input and label -->
+
+                <label for="groupMembers">Members (comma separated)</label>
+                <!-- Label for group members input with format instructions -->
+
+                <input
+                  id="groupMembers"
+                  type="text"
+                  placeholder="Enter usernames separated by commas"
+                />
+                <!-- Input field for group member usernames in comma-separated format -->
+              </div>
+
+              <button id="confirmCreateGroupBtn" class="btn btn-primary btn-small">
+                <!-- Button to confirm creating group -->
+                Create Group
+              </button>
+
+              <button id="cancelCreateGroupBtn" class="btn btn-secondary btn-small">
+                <!-- Button to cancel creating group and close form -->
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <!-- ===== CHAT VIEW ===== -->
+          <!-- Chat interface with messages and message input, hidden until chat selected -->
+          <div id="chatView" class="chat-view hidden">
+            <!-- Container for active chat display, hidden by default -->
+
+            <!-- ===== MESSAGES CONTAINER ===== -->
+            <!-- Scrollable area displaying all messages in current chat -->
+            <div id="messageContainer" class="message-container">
+              <!-- Container for messages, scrollable, dynamically populated by JavaScript -->
+            </div>
+
+            <!-- ===== MESSAGE INPUT SECTION ===== -->
+            <!-- Area at bottom for composing and sending messages -->
+            <div class="message-input-section">
+              <!-- Container for message input and send button -->
+
+              <form id="messageForm" class="message-form">
+                <!-- Form for sending messages -->
+
+                <div class="input-group">
+                  <!-- Wrapper for input field and send button -->
+
+                  <input
+                    id="messageInput"
+                    type="text"
+                    class="message-input"
+                    placeholder="Type a message..."
+                    required
+                  />
+                  <!-- Text input for composing messages, required field -->
+
+                  <button
+                    type="submit"
+                    id="sendButton"
+                    class="btn btn-primary btn-send"
+                  >
+                    <!-- Button to send message -->
+                    Send
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ===== SCRIPTS ===== -->
+    <!-- Link to external JavaScript file for application logic -->
+    <script src="app.js"></script>
+    <!-- JavaScript file containing all interactive functionality and backend communication -->
+  </body>
 </html>

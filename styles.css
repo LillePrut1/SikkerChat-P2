@@ -1,266 +1,1017 @@
-:root{
-  --bg: #0f1220;
-  --bg-soft: #14182a;
-  --card: rgba(255,255,255,0.06);
-  --card-border: rgba(255,255,255,0.12);
-  --text: #e9ecf1;
-  --text-dim: #b9c2d0;
-  --primary: #6ea8fe;
-  --primary-strong: #4d90fe;
-  --success: #00d1b2;
-  --danger: #ff6b6b;
-  --shadow: 0 10px 30px rgba(0,0,0,0.35);
-  --glass: blur(8px);
+/* ========== CSS VARIABLES - DARK THEME ========== */
+/* Root CSS variables for dark theme color scheme */
+:root {
+  /* Dark background color for main page background */
+  --bg-dark: #0f1419;
+  /* Slightly lighter background for secondary elements */
+  --bg-secondary: #1a1f2e;
+  /* Light text color for main content */
+  --text-light: #e4e6eb;
+  /* Dimmed text color for secondary content */
+  --text-dim: #9ca3af;
+  /* Primary accent color for buttons and highlights */
+  --primary: #3b82f6;
+  /* Darker shade of primary for hover states */
+  --primary-dark: #1e40af;
+  /* Light shade of primary for backgrounds */
+  --primary-light: rgba(59, 130, 246, 0.15);
+  /* Danger color for delete buttons */
+  --danger: #ef4444;
+  /* Darker shade of danger for hover states */
+  --danger-dark: #dc2626;
+  /* Light shade of danger for backgrounds */
+  --danger-light: rgba(239, 68, 68, 0.15);
+  /* Border color for subtle dividers */
+  --border: rgba(255, 255, 255, 0.1);
+  /* Shadow effect for depth */
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  /* Radius for small border-radius properties */
+  --radius-sm: 6px;
+  /* Radius for medium border-radius properties */
+  --radius-md: 8px;
+  /* Radius for large border-radius properties */
+  --radius-lg: 12px;
 }
 
-/* Light theme */
-:root.light{
-  --bg: #f6f8fc;
-  --bg-soft: #ffffff;
-  --card: rgba(0,0,0,0.03);
-  --card-border: rgba(0,0,0,0.08);
-  --text: #111827;
-  --text-dim: #4b5563;
-  --primary: #2563eb;
-  --primary-strong: #1d4ed8;
-  --shadow: 0 8px 24px rgba(0,0,0,0.1);
-}
-
-*{ box-sizing: border-box; }
-
-html, body{
-  height: 100%;
-}
-
-body{
+/* ========== RESET AND BASE STYLES ========== */
+/* Apply border-box sizing to all elements for consistent layout calculations */
+* {
+  /* Border box ensures padding/border don't add to width/height */
+  box-sizing: border-box;
+  /* Remove default margin from elements */
   margin: 0;
-  background: radial-gradient(1200px 600px at 10% -10%, #22294b 0%, transparent 55%), 
-              radial-gradient(1000px 500px at 110% 10%, #1b264a 0%, transparent 60%),
-              var(--bg);
-  color: var(--text);
-  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji";
+  /* Remove default padding from elements */
+  padding: 0;
 }
 
-.app{
-  min-height: 100dvh;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+/* Set base font and display properties for html and body */
+html,
+body {
+  /* Fill entire viewport height */
+  height: 100%;
+  /* Remove default margin */
+  margin: 0;
+  /* Set base font properties */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+  /* Set base font size */
+  font-size: 16px;
+  /* Set default text color */
+  color: var(--text-light);
+  /* Set default line height for readability */
+  line-height: 1.5;
+  /* Set default background */
+  background: var(--bg-dark);
+  /* Ensure text rendering is smooth */
+  -webkit-font-smoothing: antialiased;
+  /* Ensure text rendering is smooth on moz */
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.app-header{
+/* ========== AUTH SCREEN STYLES ========== */
+/* Auth screen container that holds login and register forms */
+#authScreen,
+.auth-screen {
+  /* Display as flex to center content */
   display: flex;
+  /* Align items to center vertically */
   align-items: center;
+  /* Center items horizontally */
+  justify-content: center;
+  /* Fill full viewport height */
+  min-height: 100vh;
+  /* Set dark background */
+  background: var(--bg-dark);
+  /* Initially visible */
+  display: flex;
+  /* Add subtle gradient background */
+  background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-secondary) 100%);
+}
+
+/* Auth form container with card styling */
+.auth-container {
+  /* Use flex for vertical layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Space items out */
+  gap: 24px;
+  /* Add padding for breathing room */
+  padding: 40px;
+  /* Set max width for readability */
+  max-width: 420px;
+  /* Add subtle background */
+  background: var(--bg-secondary);
+  /* Add border */
+  border: 1px solid var(--border);
+  /* Round corners */
+  border-radius: var(--radius-lg);
+  /* Add shadow for depth */
+  box-shadow: var(--shadow);
+}
+
+/* App title in auth screen */
+.app-title {
+  /* Center text */
+  text-align: center;
+  /* Set large font size */
+  font-size: 28px;
+  /* Make text bold */
+  font-weight: 700;
+  /* Add margin below title */
+  margin-bottom: 12px;
+  /* Use light text color */
+  color: var(--text-light);
+  /* Add letter spacing for elegance */
+  letter-spacing: 0.5px;
+}
+
+/* Tab buttons for switching between login and register */
+.auth-tabs {
+  /* Use flex for horizontal layout */
+  display: flex;
+  /* Add gap between buttons */
+  gap: 12px;
+  /* Add bottom margin to separate from forms */
+  margin-bottom: 8px;
+}
+
+/* Individual tab button styling */
+.tab-button {
+  /* Fill equal space */
+  flex: 1;
+  /* Set padding for clickable area */
+  padding: 12px 16px;
+  /* Set border to none initially */
+  border: none;
+  /* Use dark background */
+  background: transparent;
+  /* Use light text */
+  color: var(--text-dim);
+  /* Set font weight */
+  font-weight: 600;
+  /* Set font size */
+  font-size: 14px;
+  /* Make cursor a pointer */
+  cursor: pointer;
+  /* Add smooth transition for color change */
+  transition: all 0.3s ease;
+  /* Add bottom border to simulate underline */
+  border-bottom: 2px solid transparent;
+  /* Round bottom corners */
+  border-radius: 0;
+}
+
+/* Active tab button state */
+.tab-button.active {
+  /* Change text color to primary */
+  color: var(--text-light);
+  /* Add primary colored bottom border */
+  border-bottom-color: var(--primary);
+}
+
+/* Auth form styling for login and register */
+.auth-form {
+  /* Use flex for vertical layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Add gap between form elements */
+  gap: 18px;
+  /* Hide forms that are not active */
+  display: none;
+}
+
+/* Show active auth form */
+.auth-form.active {
+  /* Display flex to show the form */
+  display: flex;
+}
+
+/* Form group wrapper for label and input */
+.form-group {
+  /* Use flex for vertical layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Add gap between label and input */
+  gap: 8px;
+}
+
+/* Label styling for form inputs */
+.form-group label {
+  /* Set text color to light */
+  color: var(--text-light);
+  /* Set font weight to semibold */
+  font-weight: 600;
+  /* Set font size to slightly smaller */
+  font-size: 14px;
+  /* Add slight letter spacing */
+  letter-spacing: 0.3px;
+}
+
+/* Input field styling */
+.form-group input {
+  /* Set padding for comfortable clicking */
+  padding: 12px 14px;
+  /* Use secondary background */
+  background: var(--bg-dark);
+  /* Add border with subtle color */
+  border: 1px solid var(--border);
+  /* Round corners */
+  border-radius: var(--radius-md);
+  /* Set text color to light */
+  color: var(--text-light);
+  /* Remove default outline */
+  outline: none;
+  /* Add transition for focus state */
+  transition: all 0.3s ease;
+  /* Set font size to match body */
+  font-size: 16px;
+}
+
+/* Focus state for inputs */
+.form-group input:focus {
+  /* Change border color to primary on focus */
+  border-color: var(--primary);
+  /* Add glow effect on focus */
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* Placeholder text styling */
+.form-group input::placeholder {
+  /* Set placeholder text to dimmed color */
+  color: var(--text-dim);
+  /* Slightly lighter opacity for better visibility */
+  opacity: 0.8;
+}
+
+/* ========== BUTTON STYLES ========== */
+/* Base button styling for all buttons */
+.btn {
+  /* Set padding for comfortable clicking */
+  padding: 12px 20px;
+  /* Remove default border */
+  border: none;
+  /* Round corners */
+  border-radius: var(--radius-md);
+  /* Set cursor to pointer */
+  cursor: pointer;
+  /* Make text bold */
+  font-weight: 600;
+  /* Set font size */
+  font-size: 14px;
+  /* Add smooth transition for hover effects */
+  transition: all 0.3s ease;
+  /* Set text transform to none */
+  text-transform: none;
+  /* Remove default button styling */
+  appearance: none;
+  /* Add shadow for depth */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Primary button styling */
+.btn-primary {
+  /* Set background to primary color */
+  background: var(--primary);
+  /* Set text color to white */
+  color: white;
+}
+
+/* Primary button hover state */
+.btn-primary:hover {
+  /* Darken background on hover */
+  background: var(--primary-dark);
+  /* Add slight scale effect on hover */
+  transform: translateY(-2px);
+  /* Increase shadow on hover */
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+/* Secondary button styling */
+.btn-secondary {
+  /* Set background to secondary background color */
+  background: var(--bg-secondary);
+  /* Set text color to light */
+  color: var(--text-light);
+  /* Add border to secondary buttons */
+  border: 1px solid var(--border);
+}
+
+/* Secondary button hover state */
+.btn-secondary:hover {
+  /* Slightly change background on hover */
+  background: rgba(255, 255, 255, 0.08);
+  /* Add slight scale effect on hover */
+  transform: translateY(-2px);
+}
+
+/* Danger button styling for delete actions */
+.btn-danger {
+  /* Set background to danger color */
+  background: var(--danger);
+  /* Set text color to white */
+  color: white;
+}
+
+/* Danger button hover state */
+.btn-danger:hover {
+  /* Darken background on hover */
+  background: var(--danger-dark);
+  /* Add slight scale effect on hover */
+  transform: translateY(-2px);
+  /* Increase shadow on hover */
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
+}
+
+/* Small button variant */
+.btn-small {
+  /* Reduce padding for smaller buttons */
+  padding: 8px 12px;
+  /* Reduce font size */
+  font-size: 13px;
+}
+
+/* Send button variant */
+.btn-send {
+  /* Use primary color */
+  background: var(--primary);
+  /* Use white text */
+  color: white;
+  /* Reduce width to fit button */
+  width: auto;
+  /* Add hover effect */
+  transition: all 0.3s ease;
+}
+
+/* Send button hover state */
+.btn-send:hover {
+  /* Darken on hover */
+  background: var(--primary-dark);
+  /* Add slight scale effect */
+  transform: translateY(-2px);
+}
+
+/* Disabled button state */
+.btn:disabled {
+  /* Reduce opacity when disabled */
+  opacity: 0.5;
+  /* Change cursor to not-allowed */
+  cursor: not-allowed;
+  /* Remove transform on hover when disabled */
+  transform: none;
+}
+
+/* ========== DASHBOARD STYLES ========== */
+/* Main dashboard container */
+#dashboard,
+.dashboard {
+  /* Use grid for layout */
+  display: grid;
+  /* Set grid rows for navbar and content */
+  grid-template-rows: auto 1fr;
+  /* Fill full viewport */
+  height: 100vh;
+  /* Hide dashboard initially */
+  display: none;
+  /* Set background */
+  background: var(--bg-dark);
+}
+
+/* Show dashboard when active */
+.dashboard.active {
+  /* Display grid to show dashboard */
+  display: grid;
+}
+
+/* Navigation bar at top */
+.navbar {
+  /* Use flex for horizontal layout */
+  display: flex;
+  /* Space items out */
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px clamp(16px, 4vw, 32px);
-  backdrop-filter: var(--glass);
-  background: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0)) , var(--bg-soft);
-  border-bottom: 1px solid var(--card-border);
+  /* Align items vertically */
+  align-items: center;
+  /* Add padding */
+  padding: 16px 24px;
+  /* Add background */
+  background: var(--bg-secondary);
+  /* Add border bottom */
+  border-bottom: 1px solid var(--border);
+  /* Add shadow for depth */
+  box-shadow: var(--shadow);
+  /* Make sticky so it stays at top */
   position: sticky;
+  /* Ensure navbar stays on top */
   top: 0;
+  /* Set z-index to stay on top */
+  z-index: 100;
+}
+
+/* Left side of navbar */
+.navbar-left {
+  /* Use flex for layout */
+  display: flex;
+  /* Align items */
+  align-items: center;
+  /* Add gap between items */
+  gap: 16px;
+}
+
+/* Title in navbar */
+.navbar-title {
+  /* Set font size */
+  font-size: 20px;
+  /* Make text bold */
+  font-weight: 700;
+  /* Remove margin */
+  margin: 0;
+  /* Use light text color */
+  color: var(--text-light);
+}
+
+/* Right side of navbar */
+.navbar-right {
+  /* Use flex for layout */
+  display: flex;
+  /* Align items */
+  align-items: center;
+  /* Add gap between items */
+  gap: 16px;
+}
+
+/* Current username display */
+.current-user {
+  /* Use dimmed text color */
+  color: var(--text-dim);
+  /* Set font size */
+  font-size: 14px;
+}
+
+/* Dashboard container with sidebar and main content */
+.dashboard-container {
+  /* Use grid for layout */
+  display: grid;
+  /* Set grid columns for sidebar and main content */
+  grid-template-columns: 250px 1fr;
+  /* Remove gap initially */
+  gap: 0;
+  /* Fill full height */
+  height: 100%;
+  /* Overflow hidden to prevent scrollbars */
+  overflow: hidden;
+}
+
+/* ========== SIDEBAR STYLES ========== */
+/* Sidebar for chat list */
+.sidebar {
+  /* Use flex for vertical layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Set background */
+  background: var(--bg-secondary);
+  /* Add border right */
+  border-right: 1px solid var(--border);
+  /* Fill full height */
+  height: 100%;
+  /* Overflow auto for scrolling */
+  overflow-y: auto;
+}
+
+/* Sidebar header */
+.sidebar-header {
+  /* Add padding */
+  padding: 16px;
+  /* Add border bottom */
+  border-bottom: 1px solid var(--border);
+  /* Keep it sticky at top */
+  position: sticky;
+  /* Ensure it stays on top when scrolling */
+  top: 0;
+  /* Set background to match sidebar */
+  background: var(--bg-secondary);
+  /* Set z-index */
   z-index: 10;
 }
 
-.brand{
+/* Heading in sidebar */
+.sidebar-header h3 {
+  /* Remove margin */
+  margin: 0;
+  /* Set font size */
+  font-size: 14px;
+  /* Make text bold */
+  font-weight: 700;
+  /* Use light text color */
+  color: var(--text-light);
+  /* Add letter spacing */
+  letter-spacing: 0.5px;
+  /* Make uppercase */
+  text-transform: uppercase;
+}
+
+/* Chat list container */
+.chat-list {
+  /* Use flex for vertical layout */
   display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.logo{
-  width: 42px; height: 42px;
-  display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--primary), #9dd1ff);
-  border-radius: 12px;
-  color: white;
-  box-shadow: var(--shadow);
-}
-h1{
-  margin: 0;
-  font-size: 1.25rem;
-  letter-spacing: 0.2px;
-}
-.subtitle{
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 0.9rem;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Add padding */
+  padding: 8px;
+  /* Allow growth */
+  flex: 1;
+  /* Overflow auto for scrolling */
+  overflow-y: auto;
 }
 
-.controls{
-  display: flex;
-  align-items: end;
-  gap: 12px;
-}
-.field{
-  display: grid;
-  gap: 6px;
-  color: var(--text-dim);
-  font-size: 0.9rem;
-}
-.field input{
-  background: var(--card);
-  border: 1px solid var(--card-border);
-  color: var(--text);
-  padding: 10px 12px;
-  border-radius: 10px;
-  outline: none;
-  min-width: 220px;
-}
-.field input:focus{
-  border-color: var(--primary);
-  box-shadow: 0 0 0 4px color-mix(in lab, var(--primary) 20%, transparent);
-}
-
-.chat-layout{
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 16px;
-  padding: 16px clamp(16px, 4vw, 32px);
-}
-
-.sidebar{
-  display: grid;
-  gap: 16px;
-  height: calc(100% - 12px);
-}
-
-.panel{
-  background: var(--card);
-  border: 1px solid var(--card-border);
-  border-radius: 14px;
-  padding: 14px;
-  box-shadow: var(--shadow);
-}
-.panel h3{
-  margin: 0 0 10px 0;
-  font-size: 1rem;
-  color: var(--text-dim);
-}
-.room-list{
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.room{
-  padding: 10px 12px;
-  border-radius: 10px;
-  color: var(--text);
+/* Individual chat item */
+.chat-item {
+  /* Add padding */
+  padding: 12px 16px;
+  /* Set background to transparent */
+  background: transparent;
+  /* Add border */
+  border: none;
+  /* Round corners */
+  border-radius: var(--radius-md);
+  /* Set text color */
+  color: var(--text-light);
+  /* Make cursor pointer */
   cursor: pointer;
-}
-.room:hover{
-  background: color-mix(in lab, var(--primary) 18%, transparent);
-}
-.room.active{
-  background: color-mix(in lab, var(--primary) 28%, transparent);
-  border: 1px solid color-mix(in lab, var(--primary) 55%, var(--card-border));
-}
-
-.status{
-  font-size: 0.9rem;
-  color: var(--text-dim);
-}
-
-.chat{
-  display: grid;
-  grid-template-rows: 1fr auto;
-  background: var(--card);
-  border: 1px solid var(--card-border);
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: var(--shadow);
-  min-height: 60dvh;
-}
-
-.messages{
-  padding: 16px;
-  overflow: auto;
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  background:
-    radial-gradient(800px 300px at 60% -10%, rgba(255,255,255,0.08), transparent 60%),
-    radial-gradient(800px 300px at 20% -10%, rgba(255,255,255,0.05), transparent 60%),
-    transparent;
-}
-
-.message{
-  display: grid;
-  gap: 4px;
-  max-width: 80%;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid var(--card-border);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
-}
-.message.me{
-  margin-left: auto;
-  background: color-mix(in lab, var(--primary) 35%, rgba(255,255,255,0.08));
-  border-color: color-mix(in lab, var(--primary) 65%, var(--card-border));
-}
-.message .meta{
-  display: flex;
-  gap: 8px;
-  font-size: 0.75rem;
-  color: var(--text-dim);
-}
-.message .text{
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.composer{
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  border-top: 1px solid var(--card-border);
-  padding: 12px;
-  background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,0.12));
-}
-.composer input{
-  background: rgba(255,255,255,0.08);
-  border: 1px solid var(--card-border);
-  color: var(--text);
-  padding: 12px 14px;
-  border-radius: 12px;
-  outline: none;
-}
-.composer input:focus{
-  border-color: var(--primary);
-  box-shadow: 0 0 0 4px color-mix(in lab, var(--primary) 20%, transparent);
-}
-
-.btn{
+  /* Set text align to left */
+  text-align: left;
+  /* Add transition for hover effects */
+  transition: all 0.3s ease;
+  /* Remove button appearance */
   appearance: none;
-  border: 1px solid transparent;
-  padding: 10px 14px;
-  border-radius: 12px;
-  cursor: pointer;
-  font-weight: 600;
+  /* Set font size */
+  font-size: 14px;
+  /* Add margin bottom */
+  margin-bottom: 4px;
+}
+
+/* Chat item hover state */
+.chat-item:hover {
+  /* Change background on hover */
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* Active chat item state */
+.chat-item.active {
+  /* Use primary color background */
+  background: var(--primary-light);
+  /* Use light text with primary tint */
+  color: var(--text-light);
+  /* Add border with primary color */
+  border: 1px solid var(--primary);
+}
+
+/* Empty state text */
+.empty-state {
+  /* Use dimmed text color */
+  color: var(--text-dim);
+  /* Set font size to smaller */
+  font-size: 14px;
+  /* Center text */
+  text-align: center;
+  /* Add padding */
+  padding: 24px 16px;
+  /* Add margin top to center vertically */
+  margin-top: auto;
+  /* Add margin bottom */
+  margin-bottom: auto;
+}
+
+/* ========== MAIN CONTENT STYLES ========== */
+/* Main content area */
+.main-content {
+  /* Use flex for vertical layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Fill full height */
+  height: 100%;
+  /* Set background */
+  background: var(--bg-dark);
+  /* Overflow hidden */
+  overflow: hidden;
+}
+
+/* Chat header */
+.chat-header {
+  /* Use flex for horizontal layout */
+  display: flex;
+  /* Space items out */
+  justify-content: space-between;
+  /* Align items vertically */
+  align-items: center;
+  /* Add padding */
+  padding: 16px 24px;
+  /* Add border bottom */
+  border-bottom: 1px solid var(--border);
+  /* Add background */
+  background: var(--bg-secondary);
+  /* Make sticky */
+  position: sticky;
+  /* Keep at top */
+  top: 0;
+  /* Set z-index */
+  z-index: 50;
+  /* Initially hide */
+  display: none;
+}
+
+/* Show chat header when chat is active */
+.chat-header.active {
+  /* Display flex to show */
+  display: flex;
+}
+
+/* Chat name heading */
+.chat-name {
+  /* Remove margin */
+  margin: 0;
+  /* Set font size */
+  font-size: 18px;
+  /* Make text bold */
+  font-weight: 700;
+  /* Use light text color */
+  color: var(--text-light);
+}
+
+/* Chat header actions */
+.chat-header-actions {
+  /* Use flex for layout */
+  display: flex;
+  /* Add gap between buttons */
+  gap: 8px;
+}
+
+/* Control panel */
+.control-panel {
+  /* Use flex for vertical layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Add gap between items */
+  gap: 16px;
+  /* Center content */
+  align-items: center;
+  /* Justify content to center */
+  justify-content: center;
+  /* Fill remaining space */
+  flex: 1;
+  /* Add padding */
+  padding: 32px 24px;
+}
+
+/* Heading in control panel */
+.control-panel h3 {
+  /* Remove margin */
+  margin: 0;
+  /* Set font size */
+  font-size: 20px;
+  /* Make text bold */
+  font-weight: 700;
+  /* Use light text color */
+  color: var(--text-light);
+  /* Set margin bottom */
+  margin-bottom: 8px;
+}
+
+/* Form section */
+.form-section {
+  /* Use flex for vertical layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Add gap between items */
+  gap: 14px;
+  /* Set width */
+  width: 100%;
+  /* Set max width */
+  max-width: 380px;
+  /* Add padding */
+  padding: 20px;
+  /* Add background */
+  background: var(--bg-secondary);
+  /* Add border */
+  border: 1px solid var(--border);
+  /* Round corners */
+  border-radius: var(--radius-lg);
+  /* Add shadow */
   box-shadow: var(--shadow);
 }
-.btn.primary{
-  background: linear-gradient(180deg, var(--primary), var(--primary-strong));
-  color: #fff;
-}
-.btn.secondary{
-  background: var(--card);
-  color: var(--text);
-  border-color: var(--card-border);
+
+/* Hidden form section */
+.form-section.hidden {
+  /* Hide element */
+  display: none;
 }
 
-.app-footer{
-  padding: 10px clamp(16px, 4vw, 32px);
+/* Heading in form section */
+.form-section h4 {
+  /* Remove margin */
+  margin: 0;
+  /* Set font size */
+  font-size: 16px;
+  /* Make text bold */
+  font-weight: 700;
+  /* Use light text color */
+  color: var(--text-light);
+}
+
+/* ========== CHAT VIEW STYLES ========== */
+/* Chat view container */
+.chat-view {
+  /* Use flex for vertical layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Fill full height */
+  height: 100%;
+  /* Initially hide */
+  display: none;
+}
+
+/* Show chat view when active */
+.chat-view.active {
+  /* Display flex to show */
+  display: flex;
+}
+
+/* Message container */
+.message-container {
+  /* Use flex for vertical layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Add gap between messages */
+  gap: 12px;
+  /* Add padding */
+  padding: 16px 24px;
+  /* Allow overflow for scrolling */
+  overflow-y: auto;
+  /* Set flex to grow and fill space */
+  flex: 1;
+  /* Align content to start */
+  align-content: flex-start;
+}
+
+/* Individual message styling */
+.message {
+  /* Use flex for layout */
+  display: flex;
+  /* Stack items vertically */
+  flex-direction: column;
+  /* Add gap between elements */
+  gap: 4px;
+  /* Set max width */
+  max-width: 70%;
+  /* Add padding */
+  padding: 12px 16px;
+  /* Add background */
+  background: var(--bg-secondary);
+  /* Add border */
+  border: 1px solid var(--border);
+  /* Round corners */
+  border-radius: var(--radius-lg);
+  /* Add shadow */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  /* Align self to flex start */
+  align-self: flex-start;
+}
+
+/* Own message styling (from current user) */
+.message.own {
+  /* Align to right */
+  align-self: flex-end;
+  /* Use primary color background */
+  background: var(--primary);
+  /* Use white text */
+  color: white;
+  /* Remove border */
+  border: none;
+}
+
+/* Message sender name */
+.message-sender {
+  /* Set font size to smaller */
+  font-size: 12px;
+  /* Use dimmed text color */
   color: var(--text-dim);
-  text-align: center;
+  /* Set font weight to semibold */
+  font-weight: 600;
 }
 
-/* Mobile */
-@media (max-width: 880px){
-  .chat-layout{
+/* Message text */
+.message-text {
+  /* Allow text to wrap */
+  word-wrap: break-word;
+  /* Allow white space to wrap */
+  white-space: pre-wrap;
+  /* Set line height */
+  line-height: 1.4;
+  /* Use light text color */
+  color: var(--text-light);
+}
+
+/* Own message text */
+.message.own .message-text {
+  /* Use white text */
+  color: white;
+}
+
+/* Message timestamp */
+.message-timestamp {
+  /* Set font size to smaller */
+  font-size: 11px;
+  /* Use dimmed text color */
+  color: var(--text-dim);
+  /* Add margin top to separate */
+  margin-top: 4px;
+}
+
+/* Own message timestamp */
+.message.own .message-timestamp {
+  /* Use slightly lighter color */
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Message actions container */
+.message-actions {
+  /* Use flex for layout */
+  display: flex;
+  /* Add gap between buttons */
+  gap: 8px;
+  /* Add margin top to separate */
+  margin-top: 8px;
+  /* Initially hide */
+  opacity: 0;
+  /* Add transition for opacity */
+  transition: opacity 0.3s ease;
+}
+
+/* Show message actions on hover */
+.message:hover .message-actions {
+  /* Show on hover */
+  opacity: 1;
+}
+
+/* Message input section */
+.message-input-section {
+  /* Add padding */
+  padding: 16px 24px;
+  /* Add border top */
+  border-top: 1px solid var(--border);
+  /* Add background */
+  background: var(--bg-secondary);
+  /* Keep fixed at bottom */
+  position: relative;
+  /* Prevent overflow */
+  overflow: visible;
+}
+
+/* Message form */
+.message-form {
+  /* Use flex for layout */
+  display: flex;
+  /* Add gap between elements */
+  gap: 12px;
+}
+
+/* Input group for message input */
+.input-group {
+  /* Use flex for layout */
+  display: flex;
+  /* Add gap between elements */
+  gap: 12px;
+  /* Allow growth */
+  flex: 1;
+}
+
+/* Message input field */
+.message-input {
+  /* Allow growth to fill space */
+  flex: 1;
+  /* Add padding */
+  padding: 12px 14px;
+  /* Use dark background */
+  background: var(--bg-dark);
+  /* Add border */
+  border: 1px solid var(--border);
+  /* Round corners */
+  border-radius: var(--radius-md);
+  /* Set text color */
+  color: var(--text-light);
+  /* Remove outline */
+  outline: none;
+  /* Add transition for focus */
+  transition: all 0.3s ease;
+  /* Set font size */
+  font-size: 14px;
+}
+
+/* Focus state for message input */
+.message-input:focus {
+  /* Change border color on focus */
+  border-color: var(--primary);
+  /* Add glow effect */
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* ========== UTILITY CLASSES ========== */
+/* Hidden class to hide elements */
+.hidden {
+  /* Hide element completely */
+  display: none !important;
+}
+
+/* ========== RESPONSIVE DESIGN ========== */
+/* Mobile layout adjustments */
+@media (max-width: 768px) {
+  /* Change dashboard layout on mobile */
+  .dashboard-container {
+    /* Use single column on mobile */
     grid-template-columns: 1fr;
   }
-  .sidebar{
-    order: 2;
+
+  /* Adjust sidebar for mobile */
+  .sidebar {
+    /* Reduce width on mobile */
+    max-width: 200px;
+    /* Position absolutely to overlay */
+    position: absolute;
+    /* Set height */
+    height: 100%;
+    /* Set width */
+    width: 200px;
+    /* Set z-index to overlay */
+    z-index: 200;
+    /* Initially hide */
+    left: -200px;
+    /* Add transition for slide in */
+    transition: left 0.3s ease;
+  }
+
+  /* Show sidebar when active */
+  .sidebar.active {
+    /* Slide in from left */
+    left: 0;
+  }
+
+  /* Adjust chat view on mobile */
+  .message {
+    /* Increase max width on mobile */
+    max-width: 85%;
+  }
+
+  /* Adjust navbar on mobile */
+  .navbar {
+    /* Reduce padding on mobile */
+    padding: 12px 16px;
+  }
+
+  /* Adjust chat header on mobile */
+  .chat-header {
+    /* Reduce padding on mobile */
+    padding: 12px 16px;
+  }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+  /* Adjust auth container on very small screens */
+  .auth-container {
+    /* Reduce padding on small screens */
+    padding: 24px 16px;
+    /* Reduce max width */
+    max-width: 100%;
+  }
+
+  /* Adjust control panel on small screens */
+  .control-panel {
+    /* Reduce padding on small screens */
+    padding: 16px 12px;
+  }
+
+  /* Adjust form section on small screens */
+  .form-section {
+    /* Reduce max width */
+    max-width: 100%;
+  }
+
+  /* Adjust message container on small screens */
+  .message-container {
+    /* Reduce padding on small screens */
+    padding: 12px 16px;
+  }
+
+  /* Increase message max width on small screens */
+  .message {
+    /* Allow message to take more space */
+    max-width: 90%;
   }
 }
 
