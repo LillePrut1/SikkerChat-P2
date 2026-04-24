@@ -373,7 +373,7 @@ body {
   /* Fill full viewport */
   height: 100vh;
   /* Hide dashboard initially */
-  display: none;
+  
   /* Set background */
   background: var(--bg-dark);
 }

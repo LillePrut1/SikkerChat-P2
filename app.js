@@ -568,76 +568,41 @@ function handleLogout() {
 /* Load all available chat rooms from backend */
 async function loadChatRooms() {
   try {
-    /* Send GET request to load rooms */
-    const response = await fetch(`${API_BASE_URL}/rooms`, {
-      /* Set HTTP method to GET */
-      method: "GET",
-      /* Set request headers for JSON */
-      headers: {
-        /* Specify content type as JSON */
-        "Content-Type": "application/json"
-      },
-      /* Convert request body to JSON string */
-      body: JSON.stringify({
-        /* Include authentication token in request */
-        temp_token: authToken
-      })
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/rooms?token=${authToken}`
+    );
 
-    /* Check if response status is not OK */
     if (!response.ok) {
-      /* Log error to console */
       console.error("Failed to load rooms");
-      /* Exit function early */
       return;
     }
 
-    /* Parse response as JSON */
     const data = await response.json();
-    /* Get list of groups from response */
     const groups = data.groups || [];
 
-    /* Get chat list container element */
     const chatList = document.getElementById("chatList");
-    /* Clear existing chat list items */
     chatList.innerHTML = "";
 
-    /* Check if groups list is empty */
     if (groups.length === 0) {
-      /* Create empty state message */
       const emptyState = document.createElement("p");
-      /* Add empty-state class for styling */
       emptyState.className = "empty-state";
-      /* Set text content */
       emptyState.textContent = "No groups or chats";
-      /* Append empty state to chat list */
       chatList.appendChild(emptyState);
-      /* Show control panel since no chat is selected */
       showControlPanel();
-      /* Exit function early */
       return;
     }
 
-    /* Loop through each group in the list */
     for (let group of groups) {
-      /* Create new div element for chat item */
       const chatItem = document.createElement("div");
-      /* Add chat-item class for styling */
       chatItem.className = "chat-item";
-      /* Set data-chat attribute to group name */
       chatItem.setAttribute("data-chat", group);
-      /* Set text content to group name */
       chatItem.textContent = group;
-
-      /* Append chat item to chat list */
       chatList.appendChild(chatItem);
     }
 
-    /* Show control panel by default */
     showControlPanel();
 
   } catch (error) {
-    /* Log error to console for debugging */
     console.error("Error loading chat rooms:", error);
   }
 }
@@ -740,43 +705,42 @@ function attachChatListeners() {
 
 /* ========== MESSAGE MANAGEMENT ========== */
 /* Load all messages for a specific chat */
-async function loadMessages(chatName) {
+async function loadChatRooms() {
   try {
-    /* Send GET request to load messages for chat */
-    const response = await fetch(`${API_BASE_URL}/messages?group=${encodeURIComponent(chatName)}`, {
-      /* Set HTTP method to GET */
-      method: "GET",
-      /* Set request headers for JSON */
-      headers: {
-        /* Specify content type as JSON */
-        "Content-Type": "application/json"
-      },
-      /* Convert request body to JSON string */
-      body: JSON.stringify({
-        /* Include authentication token in request */
-        temp_token: authToken
-      })
-    });
+    const response = await fetch(`${API_BASE_URL}/rooms?token=${authToken}`);
 
-    /* Check if response status is not OK */
     if (!response.ok) {
-      /* Log error to console */
-      console.error("Failed to load messages");
-      /* Exit function early */
+      console.error("Failed to load rooms");
       return;
     }
 
-    /* Parse response as JSON */
     const data = await response.json();
-    /* Get messages array from response */
-    const messages = data.messages || [];
+    const groups = data.groups || [];
 
-    /* Call function to render messages */
-    renderMessages(messages);
+    const chatList = document.getElementById("chatList");
+    chatList.innerHTML = "";
+
+    if (groups.length === 0) {
+      const emptyState = document.createElement("p");
+      emptyState.className = "empty-state";
+      emptyState.textContent = "No groups or chats";
+      chatList.appendChild(emptyState);
+      showControlPanel();
+      return;
+    }
+
+    for (let group of groups) {
+      const chatItem = document.createElement("div");
+      chatItem.className = "chat-item";
+      chatItem.setAttribute("data-chat", group);
+      chatItem.textContent = group;
+      chatList.appendChild(chatItem);
+    }
+
+    showControlPanel();
 
   } catch (error) {
-    /* Log error to console for debugging */
-    console.error("Error loading messages:", error);
+    console.error("Error loading chat rooms:", error);
   }
 }
 
@@ -813,7 +777,7 @@ function renderMessages(messages) {
     /* Add message-text class for styling */
     textDiv.className = "message-text";
     /* Set text content to message text */
-    textDiv.textContent = msg.text;
+    textDiv.textContent = msg.text || msg.ciphertext || "";
 
     /* Create timestamp element */
     const timeDiv = document.createElement("div");

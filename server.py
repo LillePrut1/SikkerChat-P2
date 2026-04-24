@@ -324,55 +324,29 @@ def login():
 # Get list of groups user belongs to
 @app.route("/rooms", methods=["GET"])
 def get_rooms():
-    """Return list of chat groups for authenticated user"""
-    # Get token from request body
-    data = request.get_json() or {}
-    
-    # Extract temp_token from request data
-    token = data.get("temp_token")
-    
-    # Validate that token was provided
-    if not token:
-        # Return error if token missing
-        return jsonify({"message": "Token required"}), 401
-    
-    # Get username associated with token
-    username = get_user_from_token(token)
-    
-    # Validate token is valid
-    if not username:
-        # Return error if token invalid or expired
-        return jsonify({"message": "Invalid token"}), 401
-    
-    # Build path to user's membership file
-    membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
-    
-    # Load user's membership data
-    memberships = load_json(membership_file)
-    
-    # Get list of group IDs user belongs to
-    group_ids = memberships.get("groups", [])
-    
-    # Initialize list to store group names
-    groups_list = []
-    
-    # Loop through each group ID
-    for group_id in group_ids:
-        # Build path to group file
-        group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
-        
-        # Load group data
-        group_data = load_json(group_file)
-        
-        # Get group name from data
-        group_name = group_data.get("group_name", group_id)
-        
-        # Add group name to response list
-        groups_list.append(group_name)
-    
-    # Return list of groups to client
-    return jsonify({"groups": groups_list}), 200
+    token = request.args.get("token")
 
+    if not token:
+        return jsonify({"message": "Token required"}), 401
+
+    username = get_user_from_token(token)
+
+    if not username:
+        return jsonify({"message": "Invalid token"}), 401
+
+    membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
+    memberships = load_json(membership_file)
+
+    group_ids = memberships.get("groups", [])
+    groups_list = []
+
+    for group_id in group_ids:
+        group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
+        group_data = load_json(group_file)
+        group_name = group_data.get("group_name", group_id)
+        groups_list.append(group_name)
+
+    return jsonify({"groups": groups_list}), 200
 # ========== MESSAGE ROUTES ==========
 
 # Get messages for a specific group
@@ -549,6 +523,7 @@ def add_group():
     
     # Get group name from request data
     groupname = data.get("groupname", "").strip()
+    members = data.get("members", [])
     
     # Validate group name was provided
     if not groupname:
@@ -592,15 +567,33 @@ def add_group():
     # Save updated membership data to storage
     save_json(membership_file, memberships)
     
-    # Build path to messages file for new group
-    messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
-    
-    # Initialize empty messages list for group
-    save_json(messages_file, {"messages": []})
-    
-    # Return success response with new group ID
-    return jsonify({"message": "Group created", "group_id": group_id}), 201
+    # ========== ADD OTHER MEMBERS ==========
+    users = load_users()
 
+    for member in members:
+        if not member:
+            continue
+
+        member = member.strip()
+
+        # Skip creator
+        if member.lower() == username.lower():
+            continue
+
+        # Check if user exists (case-insensitive)
+        if member.lower() not in [u.lower() for u in users]:
+            continue
+
+        member_file = os.path.join(MEMBERSHIPS_DIR, f"{member}.json")
+        member_data = load_json(member_file)
+
+        if "groups" not in member_data:
+            member_data["groups"] = []
+
+        if group_id not in member_data["groups"]:
+            member_data["groups"].append(group_id)
+
+        save_json(member_file, member_data)
 # ========== ERROR HANDLERS ==========
 
 # Handle 404 not found errors
