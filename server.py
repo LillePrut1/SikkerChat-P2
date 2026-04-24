@@ -352,62 +352,39 @@ def get_rooms():
 # Get messages for a specific group
 @app.route("/messages", methods=["GET"])
 def get_messages():
-    """Retrieve all messages from specified group"""
-    # Get token from request body
-    data = request.get_json() or {}
-    
-    # Extract temp_token from request data
-    token = data.get("temp_token")
-    
-    # Validate token was provided
+    token = request.args.get("token")
+
     if not token:
-        # Return error if token missing
         return jsonify({"message": "Token required"}), 401
-    
-    # Get username from token
+
     username = get_user_from_token(token)
-    
-    # Validate token is valid
+
     if not username:
-        # Return error if token invalid or expired
         return jsonify({"message": "Invalid token"}), 401
-    
-    # Get group name from query parameter
+
     group_name = request.args.get("group")
-    
-    # Validate group name was specified
+
     if not group_name:
-        # Return error if group not specified
         return jsonify({"message": "Group parameter required"}), 400
-    
-    # Find group ID by searching for matching name
+
     group_id = find_group_id_by_name(group_name)
-    
-    # Validate group was found
+
     if not group_id:
-        # Return error if group doesn't exist
         return jsonify({"message": "Group not found"}), 404
-    
-    # Check if user is member of group
+
     if not check_membership(username, group_id):
-        # Return error if user not authorized
         return jsonify({"message": "Access denied"}), 403
-    
-    # Build path to group's messages file
+
     messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
-    
-    # Load messages data for group
     messages_data = load_json(messages_file)
-    
-    # Get messages array from data
     messages = messages_data.get("messages", [])
-    
-    # Return messages to client
+
     return jsonify({"messages": messages}), 200
 
 # Send encrypted message to group
 @app.route("/messages", methods=["POST"])
 def send_message():
+   
     """Store encrypted message in group"""
     # Get JSON data from request body
     data = request.get_json()
@@ -451,7 +428,10 @@ def send_message():
     
     # Find group ID by searching for matching name
     group_id = find_group_id_by_name(group)
-    
+
+    print("USERNAME:", username)
+    print("GROUP NAME:", group)
+    print("GROUP ID:", group_id)
     # Validate group was found
     if not group_id:
         # Return error if group doesn't exist
@@ -491,83 +471,58 @@ def send_message():
     # Return success response
     return jsonify({"message": "Message sent"}), 201
 
+
 # ========== GROUP MANAGEMENT ROUTES ==========
 
 # Create new group
 @app.route("/group_add", methods=["POST"])
 def add_group():
-    """Create new chat group"""
-    # Get JSON data from request body
     data = request.get_json()
-    
-    # Validate request body exists
+
     if not data:
-        # Return error if no data provided
         return jsonify({"message": "Request body required"}), 400
-    
-    # Extract temp_token from request data
+
     token = data.get("temp_token")
-    
-    # Validate token was provided
+
     if not token:
-        # Return error if token missing
         return jsonify({"message": "Token required"}), 401
-    
-    # Get username from token
+
     username = get_user_from_token(token)
-    
-    # Validate token is valid
+
     if not username:
-        # Return error if token invalid or expired
         return jsonify({"message": "Invalid token"}), 401
-    
-    # Get group name from request data
+
     groupname = data.get("groupname", "").strip()
     members = data.get("members", [])
-    
-    # Validate group name was provided
+
     if not groupname:
-        # Return error if group name empty
         return jsonify({"message": "Group name required"}), 400
-    
-    # Generate unique group ID using UUID v4
+
     group_id = str(uuid4())
-    
-    # Create group data object
+
     group_data = {
-        # Store unique group ID
         "group_id": group_id,
-        # Store human-readable group name
         "group_name": groupname,
-        # Store creator's username
         "creator": username,
-        # Store creation timestamp in ISO format
         "created_at": datetime.now().isoformat()
     }
-    
-    # Build path to group file
+
     group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
-    
-    # Save group data to storage
     save_json(group_file, group_data)
-    
-    # Build path to creator's membership file
+
+    #  ADD CREATOR
     membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
-    
-    # Load creator's membership data
     memberships = load_json(membership_file)
-    
-    # Initialize groups list if empty
+
     if "groups" not in memberships:
         memberships["groups"] = []
-    
-    # Add new group ID to creator's memberships
-    memberships["groups"].append(group_id)
-    
-    # Save updated membership data to storage
+
+    if group_id not in memberships["groups"]:
+        memberships["groups"].append(group_id)
+
     save_json(membership_file, memberships)
-    
-    # ========== ADD OTHER MEMBERS ==========
+
+    #  ADD OTHER MEMBERS
     users = load_users()
 
     for member in members:
@@ -576,11 +531,9 @@ def add_group():
 
         member = member.strip()
 
-        # Skip creator
         if member.lower() == username.lower():
             continue
 
-        # Check if user exists (case-insensitive)
         if member.lower() not in [u.lower() for u in users]:
             continue
 
@@ -594,6 +547,72 @@ def add_group():
             member_data["groups"].append(group_id)
 
         save_json(member_file, member_data)
+
+    #  CREATE MESSAGE FILE
+    messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
+    save_json(messages_file, {"messages": []})
+
+    #  ALWAYS RETURN RESPONSE
+    return jsonify({
+        "message": "Group created",
+        "group_id": group_id
+    }), 201
+
+
+@app.route("/group_delete", methods=["POST"])
+def delete_group():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"message": "Request body required"}), 400
+
+    token = data.get("temp_token")
+    group_name = data.get("group")
+
+    if not token or not group_name:
+        return jsonify({"message": "Token and group required"}), 400
+
+    username = get_user_from_token(token)
+
+    if not username:
+        return jsonify({"message": "Invalid token"}), 401
+
+    # Find group ID
+    group_id = find_group_id_by_name(group_name)
+
+    if not group_id:
+        return jsonify({"message": "Group not found"}), 404
+
+    # Load group data
+    group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
+    group_data = load_json(group_file)
+
+    # OPTIONAL: only creator can delete
+    if group_data.get("creator") != username:
+        return jsonify({"message": "Only creator can delete group"}), 403
+
+    #  DELETE GROUP FILE
+    if os.path.exists(group_file):
+        os.remove(group_file)
+
+    #  DELETE MESSAGE FILE
+    messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
+    if os.path.exists(messages_file):
+        os.remove(messages_file)
+
+    #  REMOVE FROM ALL USERS
+    users = load_users()
+
+    for user in users:
+        membership_file = os.path.join(MEMBERSHIPS_DIR, f"{user}.json")
+        membership_data = load_json(membership_file)
+
+        if "groups" in membership_data and group_id in membership_data["groups"]:
+            membership_data["groups"].remove(group_id)
+            save_json(membership_file, membership_data)
+
+    return jsonify({"message": "Group deleted"}), 200
+
 # ========== ERROR HANDLERS ==========
 
 # Handle 404 not found errors

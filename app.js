@@ -373,18 +373,15 @@ function showControlPanel() {
 
 /* Show chat view and hide control panel */
 function showChatView() {
-  /* Get control panel element */
   const controlPanel = document.getElementById("controlPanel");
-  /* Get chat view element */
   const chatView = document.getElementById("chatView");
-  /* Get chat header element */
   const chatHeader = document.getElementById("chatHeader");
 
-  /* Add hidden class to control panel to hide it */
   controlPanel.classList.add("hidden");
-  /* Remove hidden class from chat view to show it */
+
   chatView.classList.remove("hidden");
-  /* Add active class to chat header to show it */
+  chatView.style.display = "flex";   //  FORCE SHOW
+
   chatHeader.classList.add("active");
 }
 
@@ -600,7 +597,9 @@ async function loadChatRooms() {
       chatList.appendChild(chatItem);
     }
 
+    if (!currentChatName) {
     showControlPanel();
+    }
 
   } catch (error) {
     console.error("Error loading chat rooms:", error);
@@ -682,67 +681,72 @@ function attachChatListeners() {
   const deleteChatBtn = document.getElementById("deleteChatBtn");
   /* Add click listener to delete chat button */
   deleteChatBtn.addEventListener("click", async function() {
-    /* Confirm deletion with user */
-    const confirmed = confirm(`Are you sure you want to delete ${currentChatName}?`);
+  const confirmed = confirm(`Are you sure you want to delete ${currentChatName}?`);
 
-    /* If user confirmed deletion */
-    if (confirmed) {
-      /* TODO: Add backend call to delete chat/group */
-      /* Show success message */
-      alert(`${currentChatName} deleted`);
+  if (!confirmed) return;
 
-      /* Clear current chat name */
-      currentChatName = null;
+  try {
+    const response = await fetch(`${API_BASE_URL}/group_delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        group: currentChatName,
+        temp_token: authToken
+      })
+    });
 
-      /* Show control panel */
-      showControlPanel();
+    const data = await response.json();
 
-      /* Reload chat rooms */
-      loadChatRooms();
+    if (!response.ok) {
+      alert(data.message || "Failed to delete group");
+      return;
     }
-  });
+
+    alert("Group deleted successfully");
+
+    currentChatName = null;
+    showControlPanel();
+    loadChatRooms();
+
+  } catch (error) {
+    console.error("Delete error:", error);
+    alert("Error deleting group");
+  }
+  const backBtn = document.getElementById("backBtn");
+
+backBtn.addEventListener("click", function () {
+  currentChatName = null;
+  showControlPanel();
+});
+});
 }
 
 /* ========== MESSAGE MANAGEMENT ========== */
 /* Load all messages for a specific chat */
-async function loadChatRooms() {
+
+async function loadMessages(chatName) {
   try {
-    const response = await fetch(`${API_BASE_URL}/rooms?token=${authToken}`);
+    const response = await fetch(
+      `${API_BASE_URL}/messages?group=${encodeURIComponent(chatName)}&token=${authToken}`
+    );
 
     if (!response.ok) {
-      console.error("Failed to load rooms");
+      const error = await response.json();
+      console.error("Failed to load messages:", error);
       return;
     }
 
     const data = await response.json();
-    const groups = data.groups || [];
 
-    const chatList = document.getElementById("chatList");
-    chatList.innerHTML = "";
-
-    if (groups.length === 0) {
-      const emptyState = document.createElement("p");
-      emptyState.className = "empty-state";
-      emptyState.textContent = "No groups or chats";
-      chatList.appendChild(emptyState);
-      showControlPanel();
-      return;
-    }
-
-    for (let group of groups) {
-      const chatItem = document.createElement("div");
-      chatItem.className = "chat-item";
-      chatItem.setAttribute("data-chat", group);
-      chatItem.textContent = group;
-      chatList.appendChild(chatItem);
-    }
-
-    showControlPanel();
+    renderMessages(data.messages || []);
 
   } catch (error) {
-    console.error("Error loading chat rooms:", error);
+    console.error("Error loading messages:", error);
   }
 }
+
 
 /* ========== RENDER MESSAGES ========== */
 /* Render messages in the message container */
@@ -807,43 +811,29 @@ function renderMessages(messages) {
 /* Send a message to the current chat */
 async function sendMessage(chatName, messageText) {
   try {
-    /* Send POST request to send message */
     const response = await fetch(`${API_BASE_URL}/messages`, {
-      /* Set HTTP method to POST */
       method: "POST",
-      /* Set request headers for JSON */
       headers: {
-        /* Specify content type as JSON */
         "Content-Type": "application/json"
       },
-      /* Convert request body to JSON string */
       body: JSON.stringify({
-        /* Include message text as ciphertext (placeholder for E2EE) */
         ciphertext: messageText,
-        /* Include chat/group name */
         group: chatName,
-        /* Include authentication token */
         temp_token: authToken
       })
     });
 
-    /* Check if response status is not OK */
     if (!response.ok) {
-      /* Parse error response as JSON */
       const error = await response.json();
-      /* Show error message to user */
       alert(`Failed to send message: ${error.message || "Unknown error"}`);
-      /* Exit function early */
       return;
     }
 
-    /* Call function to reload messages after sending */
+    // Reload messages after sending
     await loadMessages(chatName);
 
   } catch (error) {
-    /* Log error to console for debugging */
     console.error("Error sending message:", error);
-    /* Show error message to user */
-    alert(`Error sending message: ${error.message}`);
+    alert("Error sending message");
   }
 }
