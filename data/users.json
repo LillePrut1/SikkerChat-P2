@@ -1,27 +1,32 @@
-[
-  {
-    "username": "Nicklas",
-    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+{
+  "Nicklas": {
+    "password_hash": "$2b$12$VXxJ4c8K9L2M3N4O5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2G3H4I5J6K",
+    "temp_token": null,
+    "public_key": null
   },
-  {
-    "username": "Yosef",
-    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+  "Yosef": {
+    "password_hash": "$2b$12$VXxJ4c8K9L2M3N4O5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2G3H4I5J6K",
+    "temp_token": null,
+    "public_key": null
   },
-  {
-    "username": "Ali",
-    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+  "Ali": {
+    "password_hash": "$2b$12$VXxJ4c8K9L2M3N4O5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2G3H4I5J6K",
+    "temp_token": null,
+    "public_key": null
   },
-  {
-    "username": "Owe",
-    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+  "Owe": {
+    "password_hash": "$2b$12$VXxJ4c8K9L2M3N4O5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2G3H4I5J6K",
+    "temp_token": null,
+    "public_key": null
   },
-  {
-    "username": "Aske",
-    "password_hash": "008c70392e3abfbd0fa47bbc2ed96aa99bd49e159727fcba0f2e6abeb3a9d601"
+  "Aske": {
+    "password_hash": "$2b$12$VXxJ4c8K9L2M3N4O5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2G3H4I5J6K",
+    "temp_token": null,
+    "public_key": null
   },
-  {
-    "username": "nick",
+  "nick": {
     "password_hash": "$2b$12$gb1vTg2nrnJVKMrzjAcGvO2hL80qZt4ti/jgdDpOcB31jMwpX3U3W",
-    "temp_token": "oPEr8sjPKrSel-1j1ATF4R67eDvO67qYTsknA2_iCvs"
+    "temp_token": "oPEr8sjPKrSel-1j1ATF4R67eDvO67qYTsknA2_iCvs",
+    "public_key": null
   }
-]
+}
