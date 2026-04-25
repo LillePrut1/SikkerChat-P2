@@ -187,15 +187,35 @@
           <div class="sidebar-header">
             <!-- Header section of sidebar -->
 
-            <h3>Chats / Groups</h3>
-            <!-- Title for chats and groups section -->
+            <h3>Dashboard</h3>
+            <!-- Title for dashboard section -->
           </div>
 
-          <div id="chatList" class="chat-list">
-            <!-- Container for list of chats and groups, dynamically populated by JavaScript -->
+          <!-- ===== FRIENDS SECTION ===== -->
+          <!-- Section for displaying friends list -->
+          <div class="sidebar-section">
+            <h4>Friends</h4>
+            <div id="friendsList" class="friends-list">
+              <p class="empty-state">No friends</p>
+            </div>
+          </div>
 
-            <p class="empty-state">No groups or chats</p>
-            <!-- Placeholder text shown when no chats exist -->
+          <!-- ===== FRIEND REQUESTS SECTION ===== -->
+          <!-- Section for displaying pending friend requests -->
+          <div class="sidebar-section">
+            <h4>Requests <span id="requestCount" class="request-badge"></span></h4>
+            <div id="requestsList" class="requests-list">
+              <p class="empty-state">No requests</p>
+            </div>
+          </div>
+
+          <!-- ===== GROUPS SECTION ===== -->
+          <!-- Section for displaying groups/chats -->
+          <div class="sidebar-section">
+            <h4>Groups</h4>
+            <div id="chatList" class="chat-list">
+              <p class="empty-state">No groups</p>
+            </div>
           </div>
         </aside>
 
@@ -216,13 +236,19 @@
             <div class="chat-header-actions">
               <!-- Action buttons in chat header -->
 
+              <button id="leaveGroupBtn" class="btn btn-secondary btn-small">
+                <!-- Button to leave current group -->
+                Leave Group
+              </button>
+
               <button id="deleteChatBtn" class="btn btn-danger btn-small">
-                
-                <!-- Button to delete current chat or leave group -->
-                 <button id="backBtn" class="btn btn-secondary btn-small">
-                  Back
-                  </button>
-                Delete Chat
+                <!-- Button to delete current chat or group -->
+                Delete Group
+              </button>
+
+              <button id="backBtn" class="btn btn-secondary btn-small">
+                <!-- Button to go back to dashboard -->
+                Back
               </button>
             </div>
           </div>
@@ -250,26 +276,26 @@
             <div id="addFriendForm" class="form-section hidden">
               <!-- Container for add friend form, hidden initially -->
 
-              <h4>Add Friend</h4>
+              <h4>Send Friend Request</h4>
               <!-- Subheading for add friend section -->
 
               <div class="form-group">
                 <!-- Wrapper for form input and label -->
 
-                <label for="friendUsername">Friend's Username</label>
+                <label for="friendUsername">Username</label>
                 <!-- Label for friend username input -->
 
                 <input
                   id="friendUsername"
                   type="text"
-                  placeholder="Enter friend's username"
+                  placeholder="Enter username"
                 />
                 <!-- Input field for friend's username -->
               </div>
 
               <button id="confirmAddFriendBtn" class="btn btn-primary btn-small">
                 <!-- Button to confirm adding friend -->
-                Add Friend
+                Send Request
               </button>
 
               <button id="cancelAddFriendBtn" class="btn btn-secondary btn-small">
@@ -303,15 +329,12 @@
               <div class="form-group">
                 <!-- Wrapper for form input and label -->
 
-                <label for="groupMembers">Members (comma separated)</label>
-                <!-- Label for group members input with format instructions -->
+                <label for="groupMembers">Add Friends</label>
+                <!-- Label for group members selection -->
 
-                <input
-                  id="groupMembers"
-                  type="text"
-                  placeholder="Enter usernames separated by commas"
-                />
-                <!-- Input field for group member usernames in comma-separated format -->
+                <div id="groupMembers" class="members-checkbox-list">
+                  <!-- Container for friend checkboxes, populated by JavaScript -->
+                </div>
               </div>
 
               <button id="confirmCreateGroupBtn" class="btn btn-primary btn-small">

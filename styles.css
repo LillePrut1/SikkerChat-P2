@@ -1015,3 +1015,206 @@ body {
   }
 }
 
+/* ========== FRIEND SYSTEM STYLES ========== */
+
+/* Sidebar sections for organizing content */
+.sidebar-section {
+  /* Add spacing between sections */
+  margin-bottom: 20px;
+  /* Add border below section */
+  border-bottom: 1px solid var(--border);
+  /* Add padding below section */
+  padding-bottom: 15px;
+}
+
+/* Section headers */
+.sidebar-section h4 {
+  /* Light text color */
+  color: var(--text-light);
+  /* Add margin below header */
+  margin-bottom: 10px;
+  /* Font size for headers */
+  font-size: 14px;
+  /* Font weight for emphasis */
+  font-weight: 600;
+  /* Add letter spacing for readability */
+  letter-spacing: 0.5px;
+}
+
+/* Request badge showing count */
+.request-badge {
+  /* Danger color background */
+  background-color: var(--danger);
+  /* White text color */
+  color: white;
+  /* Padding for badge */
+  padding: 2px 8px;
+  /* Border radius for pill shape */
+  border-radius: 12px;
+  /* Font size for badge */
+  font-size: 11px;
+  /* Font weight for emphasis */
+  font-weight: 600;
+  /* Margin left for spacing */
+  margin-left: 5px;
+}
+
+/* Friends list item */
+.friend-item {
+  /* Padding around friend item */
+  padding: 8px 12px;
+  /* Add bottom margin for spacing */
+  margin-bottom: 6px;
+  /* Background color */
+  background-color: var(--bg-secondary);
+  /* Border radius for rounded corners */
+  border-radius: var(--radius-sm);
+  /* Text color */
+  color: var(--text-light);
+  /* Font size */
+  font-size: 13px;
+  /* Add border */
+  border: 1px solid var(--border);
+}
+
+/* Friend name inside item */
+.friend-name {
+  /* Display as block */
+  display: block;
+}
+
+/* Requests list container */
+.requests-list {
+  /* No additional styling needed */
+}
+
+/* Request item in list */
+.request-item {
+  /* Padding around item */
+  padding: 10px 12px;
+  /* Add bottom margin */
+  margin-bottom: 8px;
+  /* Background color */
+  background-color: var(--bg-secondary);
+  /* Border radius */
+  border-radius: var(--radius-sm);
+  /* Border */
+  border: 1px solid var(--border);
+  /* Display flex for layout */
+  display: flex;
+  /* Align items center */
+  align-items: center;
+  /* Space between content and buttons */
+  justify-content: space-between;
+  /* Gap between elements */
+  gap: 10px;
+}
+
+/* Request info section */
+.request-info {
+  /* Flex grow to take available space */
+  flex-grow: 1;
+}
+
+/* Request from text */
+.request-from {
+  /* Display as block */
+  display: block;
+  /* Text color */
+  color: var(--text-light);
+  /* Font size */
+  font-size: 13px;
+}
+
+/* Request to text */
+.request-to {
+  /* Display as block */
+  display: block;
+  /* Dimmed text color */
+  color: var(--text-dim);
+  /* Font size */
+  font-size: 12px;
+  /* Font style italic */
+  font-style: italic;
+}
+
+/* Request actions container */
+.request-actions {
+  /* Display flex */
+  display: flex;
+  /* Gap between buttons */
+  gap: 6px;
+  /* No flex wrap */
+  flex-wrap: nowrap;
+}
+
+/* Members checkbox list for group creation */
+.members-checkbox-list {
+  /* Padding around list */
+  padding: 10px;
+  /* Background color */
+  background-color: var(--bg-secondary);
+  /* Border radius */
+  border-radius: var(--radius-sm);
+  /* Max height with scroll */
+  max-height: 200px;
+  /* Overflow for scroll */
+  overflow-y: auto;
+  /* Border */
+  border: 1px solid var(--border);
+}
+
+/* Checkbox label styling */
+.checkbox-label {
+  /* Display block */
+  display: flex;
+  /* Align items center */
+  align-items: center;
+  /* Padding */
+  padding: 8px 0;
+  /* Text color */
+  color: var(--text-light);
+  /* Font size */
+  font-size: 13px;
+  /* Cursor pointer */
+  cursor: pointer;
+  /* Gap between checkbox and text */
+  gap: 8px;
+}
+
+/* Checkbox input styling */
+.checkbox-label input[type="checkbox"] {
+  /* Cursor pointer */
+  cursor: pointer;
+  /* Width and height */
+  width: 16px;
+  height: 16px;
+  /* Accent color for checkbox */
+  accent-color: var(--primary);
+}
+
+/* Button size variations */
+.btn-small {
+  /* Smaller padding */
+  padding: 6px 12px;
+  /* Smaller font size */
+  font-size: 12px;
+  /* Smaller border radius */
+  border-radius: var(--radius-sm);
+}
+
+/* Adjust chat header actions on smaller screens */
+@media (max-width: 600px) {
+  .chat-header-actions {
+    /* Stack buttons vertically */
+    flex-direction: column;
+    /* Gap between buttons */
+    gap: 8px;
+  }
+
+  .btn-small {
+    /* Full width on mobile */
+    width: 100%;
+  }
+}
+

@@ -1,730 +1,519 @@
 /* ========== API CONFIGURATION ========== */
-/* Base URL for all API requests to Flask backend */
 const API_BASE_URL = "http://localhost:5000";
 
 /* ========== GLOBAL STATE ========== */
-/* Store current logged in username */
 let currentUsername = null;
-/* Store authentication token from login */
 let authToken = null;
-/* Store currently selected chat/group name */
 let currentChatName = null;
 
+let appState = {
+  friends: [],
+  incomingRequests: [],
+  outgoingRequests: [],
+  groups: [],
+  currentMessages: []
+};
+
 /* ========== INITIALIZATION ========== */
-/* Initialize application when page loads */
 document.addEventListener("DOMContentLoaded", function() {
-  /* Call main initialization function */
   initializeApp();
 });
 
-/* ========== MAIN INIT FUNCTION ========== */
-/* Main initialization function that runs on page load */
 function initializeApp() {
-  /* Check if user has valid token in localStorage */
   const savedToken = localStorage.getItem("authToken");
-  /* Check if username is saved in localStorage */
   const savedUsername = localStorage.getItem("username");
 
-  /* If both token and username exist, show dashboard */
   if (savedToken && savedUsername) {
-    /* Store token in memory */
     authToken = savedToken;
-    /* Store username in memory */
     currentUsername = savedUsername;
-    /* Call function to show dashboard */
     showDashboard();
-    /* Call function to load chat rooms */
-    loadChatRooms();
+    loadDashboardData();
+    attachEventListeners();
   } else {
-    /* Show auth screen if no token found */
     showAuthScreen();
+    attachAuthListeners();
   }
-
-  /* Attach event listeners for auth tabs */
-  attachAuthTabListeners();
-  /* Attach event listeners for login form */
-  attachLoginFormListener();
-  /* Attach event listeners for register form */
-  attachRegisterFormListener();
-  /* Attach event listeners for dashboard controls */
-  attachDashboardListeners();
-  /* Attach event listeners for chat controls */
-  attachChatListeners();
 }
 
-/* ========== AUTH TAB SWITCHING ========== */
-/* Attach click listeners to login and register tab buttons */
-function attachAuthTabListeners() {
-  /* Get login tab button element */
+/* ========== AUTH SCREEN ========== */
+function attachAuthListeners() {
   const loginTabBtn = document.getElementById("loginTabBtn");
-  /* Get register tab button element */
   const registerTabBtn = document.getElementById("registerTabBtn");
-  /* Get login form element */
   const loginForm = document.getElementById("loginForm");
-  /* Get register form element */
   const registerForm = document.getElementById("registerForm");
 
-  /* Add click listener to login tab button */
-  loginTabBtn.addEventListener("click", function() {
-    /* Remove active class from register button */
+  loginTabBtn.addEventListener("click", () => {
     registerTabBtn.classList.remove("active");
-    /* Add active class to login button */
     loginTabBtn.classList.add("active");
-    /* Remove active class from register form */
     registerForm.classList.remove("active");
-    /* Add active class to login form */
     loginForm.classList.add("active");
   });
 
-  /* Add click listener to register tab button */
-  registerTabBtn.addEventListener("click", function() {
-    /* Remove active class from login button */
+  registerTabBtn.addEventListener("click", () => {
     loginTabBtn.classList.remove("active");
-    /* Add active class to register button */
     registerTabBtn.classList.add("active");
-    /* Remove active class from login form */
     loginForm.classList.remove("active");
-    /* Add active class to register form */
     registerForm.classList.add("active");
   });
-}
 
-/* ========== LOGIN FORM HANDLING ========== */
-/* Attach submit listener to login form */
-function attachLoginFormListener() {
-  /* Get login form element */
-  const loginForm = document.getElementById("loginForm");
-
-  /* Add submit event listener to login form */
-  loginForm.addEventListener("submit", async function(event) {
-    /* Prevent default form submission behavior */
-    event.preventDefault();
-
-    /* Get username input value */
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
     const username = document.getElementById("loginUsername").value.trim();
-    /* Get password input value */
     const password = document.getElementById("loginPassword").value.trim();
 
-    /* Validate that username is not empty */
-    if (!username) {
-      /* Show error if username is empty */
-      alert("Username cannot be empty");
-      /* Exit function early */
+    if (!username || !password) {
+      alert("Please fill all fields");
       return;
     }
 
-    /* Validate that password is not empty */
-    if (!password) {
-      /* Show error if password is empty */
-      alert("Password cannot be empty");
-      /* Exit function early */
-      return;
-    }
-
-    /* Call function to handle login with username and password */
     await handleLogin(username, password);
   });
-}
 
-/* ========== LOGIN LOGIC ========== */
-/* Handle login request to backend */
-async function handleLogin(username, password) {
-  try {
-    /* Send POST request to login endpoint */
-    const response = await fetch(`${API_BASE_URL}/login`, {
-      /* Set HTTP method to POST */
-      method: "POST",
-      /* Set request headers for JSON */
-      headers: {
-        /* Specify content type as JSON */
-        "Content-Type": "application/json"
-      },
-      /* Convert request body to JSON string */
-      body: JSON.stringify({
-        /* Include username in request */
-        username: username,
-        /* Include password in request */
-        password: password
-      })
-    });
-
-    /* Check if response status is not OK */
-    if (!response.ok) {
-      /* Parse error response as JSON */
-      const error = await response.json();
-      /* Show error message to user */
-      alert(`Login failed: ${error.message || "Unknown error"}`);
-      /* Exit function early */
-      return;
-    }
-
-    /* Parse response as JSON */
-    const data = await response.json();
-
-    /* Check if response contains a token */
-    if (!data.token) {
-      /* Show error if token is missing */
-      alert("Login failed: No token received");
-      /* Exit function early */
-      return;
-    }
-
-    /* Store token in memory */
-    authToken = data.token;
-    /* Store username in memory */
-    currentUsername = username;
-    /* Store token in localStorage for persistence */
-    localStorage.setItem("authToken", authToken);
-    /* Store username in localStorage for persistence */
-    localStorage.setItem("username", currentUsername);
-
-    /* Clear login form fields */
-    document.getElementById("loginUsername").value = "";
-    /* Clear password field */
-    document.getElementById("loginPassword").value = "";
-
-    /* Call function to show dashboard */
-    showDashboard();
-    /* Call function to load chat rooms */
-    loadChatRooms();
-
-  } catch (error) {
-    /* Log error to console for debugging */
-    console.error("Login error:", error);
-    /* Show error message to user */
-    alert(`Login error: ${error.message}`);
-  }
-}
-
-/* ========== REGISTER FORM HANDLING ========== */
-/* Attach submit listener to register form */
-function attachRegisterFormListener() {
-  /* Get register form element */
-  const registerForm = document.getElementById("registerForm");
-
-  /* Add submit event listener to register form */
-  registerForm.addEventListener("submit", async function(event) {
-    /* Prevent default form submission behavior */
-    event.preventDefault();
-
-    /* Get username input value */
+  registerForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
     const username = document.getElementById("registerUsername").value.trim();
-    /* Get password input value */
     const password = document.getElementById("registerPassword").value.trim();
-    /* Get confirm password input value */
     const confirmPassword = document.getElementById("registerConfirmPassword").value.trim();
 
-    /* Validate that username is not empty */
-    if (!username) {
-      /* Show error if username is empty */
-      alert("Username cannot be empty");
-      /* Exit function early */
+    if (!username || !password) {
+      alert("Please fill all fields");
       return;
     }
 
-    /* Validate that password is not empty */
-    if (!password) {
-      /* Show error if password is empty */
-      alert("Password cannot be empty");
-      /* Exit function early */
-      return;
-    }
-
-    /* Check if passwords match */
     if (password !== confirmPassword) {
-      /* Show error if passwords don't match */
       alert("Passwords do not match");
-      /* Exit function early */
       return;
     }
 
-    /* Validate password length */
     if (password.length < 6) {
-      /* Show error if password is too short */
       alert("Password must be at least 6 characters");
-      /* Exit function early */
       return;
     }
 
-    /* Call function to handle registration */
     await handleRegister(username, password);
   });
 }
 
-/* ========== REGISTER LOGIC ========== */
-/* Handle register request to backend */
-async function handleRegister(username, password) {
+async function handleLogin(username, password) {
   try {
-    /* Send POST request to register endpoint */
-    const response = await fetch(`${API_BASE_URL}/register`, {
-      /* Set HTTP method to POST */
+    const response = await fetch(`${API_BASE_URL}/login`, {
       method: "POST",
-      /* Set request headers for JSON */
-      headers: {
-        /* Specify content type as JSON */
-        "Content-Type": "application/json"
-      },
-      /* Convert request body to JSON string */
-      body: JSON.stringify({
-        /* Include username in request */
-        username: username,
-        /* Include password in request */
-        password: password
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
     });
 
-    /* Check if response status is not OK */
     if (!response.ok) {
-      /* Parse error response as JSON */
       const error = await response.json();
-      /* Show error message to user */
-      alert(`Registration failed: ${error.message || "Unknown error"}`);
-      /* Exit function early */
+      alert(`Login failed: ${error.message}`);
       return;
     }
 
-    /* Parse response as JSON */
     const data = await response.json();
+    authToken = data.token;
+    currentUsername = username;
+    localStorage.setItem("authToken", authToken);
+    localStorage.setItem("username", currentUsername);
 
-    /* Show success message */
-    alert("Registration successful! Please log in.");
+    document.getElementById("loginUsername").value = "";
+    document.getElementById("loginPassword").value = "";
 
-    /* Clear register form fields */
-    document.getElementById("registerUsername").value = "";
-    /* Clear password field */
-    document.getElementById("registerPassword").value = "";
-    /* Clear confirm password field */
-    document.getElementById("registerConfirmPassword").value = "";
-
-    /* Get login tab button element */
-    const loginTabBtn = document.getElementById("loginTabBtn");
-    /* Get register tab button element */
-    const registerTabBtn = document.getElementById("registerTabBtn");
-    /* Get login form element */
-    const loginForm = document.getElementById("loginForm");
-    /* Get register form element */
-    const registerForm = document.getElementById("registerForm");
-
-    /* Switch to login form after successful registration */
-    registerTabBtn.classList.remove("active");
-    /* Add active class to login button */
-    loginTabBtn.classList.add("active");
-    /* Remove active class from register form */
-    registerForm.classList.remove("active");
-    /* Add active class to login form */
-    loginForm.classList.add("active");
+    showDashboard();
+    loadDashboardData();
+    attachEventListeners();
 
   } catch (error) {
-    /* Log error to console for debugging */
+    console.error("Login error:", error);
+    alert("Login error");
+  }
+}
+
+async function handleRegister(username, password) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      alert(`Registration failed: ${error.message}`);
+      return;
+    }
+
+    alert("Registration successful! Please log in.");
+    document.getElementById("registerUsername").value = "";
+    document.getElementById("registerPassword").value = "";
+    document.getElementById("registerConfirmPassword").value = "";
+
+    document.getElementById("loginTabBtn").click();
+
+  } catch (error) {
     console.error("Register error:", error);
-    /* Show error message to user */
-    alert(`Registration error: ${error.message}`);
+    alert("Registration error");
   }
 }
 
 /* ========== UI STATE MANAGEMENT ========== */
-/* Show authentication screen and hide dashboard */
 function showAuthScreen() {
-  /* Get auth screen element */
-  const authScreen = document.getElementById("authScreen");
-  /* Get dashboard element */
-  const dashboard = document.getElementById("dashboard");
-
-  /* Add hidden class to dashboard to hide it */
-  dashboard.classList.add("hidden");
-  /* Remove hidden class from auth screen to show it */
-  authScreen.classList.remove("hidden");
+  document.getElementById("authScreen").classList.remove("hidden");
+  document.getElementById("dashboard").classList.add("hidden");
 }
 
-/* Show dashboard and hide authentication screen */
 function showDashboard() {
-  /* Get auth screen element */
-  const authScreen = document.getElementById("authScreen");
-  /* Get dashboard element */
-  const dashboard = document.getElementById("dashboard");
-
-  /* Add hidden class to auth screen to hide it */
-  authScreen.classList.add("hidden");
-  /* Remove hidden class from dashboard to show it */
-  dashboard.classList.remove("hidden");
-
-  /* Get current username display element */
-  const currentUsernameElement = document.getElementById("currentUsername");
-  /* Set display text to current username */
-  currentUsernameElement.textContent = `Logged in as: ${currentUsername}`;
+  document.getElementById("authScreen").classList.add("hidden");
+  document.getElementById("dashboard").classList.remove("hidden");
+  document.getElementById("currentUsername").textContent = `Logged in as: ${currentUsername}`;
 }
 
-/* Show control panel and hide chat view */
 function showControlPanel() {
-  /* Get control panel element */
-  const controlPanel = document.getElementById("controlPanel");
-  /* Get chat view element */
-  const chatView = document.getElementById("chatView");
-  /* Get chat header element */
-  const chatHeader = document.getElementById("chatHeader");
-
-  /* Remove hidden class from control panel to show it */
-  controlPanel.classList.remove("hidden");
-  /* Add hidden class to chat view to hide it */
-  chatView.classList.add("hidden");
-  /* Remove active class from chat header to hide it */
-  chatHeader.classList.remove("active");
-}
-
-/* Show chat view and hide control panel */
-function showChatView() {
-  const controlPanel = document.getElementById("controlPanel");
-  const chatView = document.getElementById("chatView");
-  const chatHeader = document.getElementById("chatHeader");
-
-  controlPanel.classList.add("hidden");
-
-  chatView.classList.remove("hidden");
-  chatView.style.display = "flex";   //  FORCE SHOW
-
-  chatHeader.classList.add("active");
-}
-
-/* ========== DASHBOARD LISTENERS ========== */
-/* Attach event listeners to dashboard controls */
-function attachDashboardListeners() {
-  /* Get logout button element */
-  const logoutBtn = document.getElementById("logoutBtn");
-  /* Get add friend button element */
-  const addFriendBtn = document.getElementById("addFriendBtn");
-  /* Get create group button element */
-  const createGroupBtn = document.getElementById("createGroupBtn");
-
-  /* Add click listener to logout button */
-  logoutBtn.addEventListener("click", handleLogout);
-
-  /* Add click listener to add friend button */
-  addFriendBtn.addEventListener("click", function() {
-    /* Get add friend form element */
-    const addFriendForm = document.getElementById("addFriendForm");
-    /* Toggle hidden class to show/hide form */
-    addFriendForm.classList.toggle("hidden");
-  });
-
-  /* Add click listener to create group button */
-  createGroupBtn.addEventListener("click", function() {
-    /* Get create group form element */
-    const createGroupForm = document.getElementById("createGroupForm");
-    /* Toggle hidden class to show/hide form */
-    createGroupForm.classList.toggle("hidden");
-  });
-
-  /* Get cancel add friend button element */
-  const cancelAddFriendBtn = document.getElementById("cancelAddFriendBtn");
-  /* Add click listener to cancel add friend button */
-  cancelAddFriendBtn.addEventListener("click", function() {
-    /* Get add friend form element */
-    const addFriendForm = document.getElementById("addFriendForm");
-    /* Add hidden class to hide form */
-    addFriendForm.classList.add("hidden");
-  });
-
-  /* Get cancel create group button element */
-  const cancelCreateGroupBtn = document.getElementById("cancelCreateGroupBtn");
-  /* Add click listener to cancel create group button */
-  cancelCreateGroupBtn.addEventListener("click", function() {
-    /* Get create group form element */
-    const createGroupForm = document.getElementById("createGroupForm");
-    /* Add hidden class to hide form */
-    createGroupForm.classList.add("hidden");
-  });
-
-  /* Get confirm add friend button element */
-  const confirmAddFriendBtn = document.getElementById("confirmAddFriendBtn");
-  /* Add click listener to confirm add friend button */
-  confirmAddFriendBtn.addEventListener("click", function() {
-    /* Get friend username input element */
-    const friendUsername = document.getElementById("friendUsername").value.trim();
-
-    /* Validate that friend username is not empty */
-    if (!friendUsername) {
-      /* Show error if friend username is empty */
-      alert("Please enter a friend username");
-      /* Exit function early */
-      return;
-    }
-
-    /* Show success message (UI only for now) */
-    alert(`Friend request sent to ${friendUsername}`);
-
-    /* Clear friend username input */
-    document.getElementById("friendUsername").value = "";
-    /* Get add friend form element */
-    const addFriendForm = document.getElementById("addFriendForm");
-    /* Add hidden class to hide form */
-    addFriendForm.classList.add("hidden");
-  });
-
-  /* Get confirm create group button element */
-  const confirmCreateGroupBtn = document.getElementById("confirmCreateGroupBtn");
-  /* Add click listener to confirm create group button */
-  confirmCreateGroupBtn.addEventListener("click", async function() {
-    /* Get group name input value */
-    const groupName = document.getElementById("groupName").value.trim();
-    /* Get group members input value */
-    const groupMembers = document.getElementById("groupMembers").value.trim();
-
-    /* Validate that group name is not empty */
-    if (!groupName) {
-      /* Show error if group name is empty */
-      alert("Please enter a group name");
-      /* Exit function early */
-      return;
-    }
-
-    /* Call function to handle group creation */
-    await handleCreateGroup(groupName, groupMembers);
-  });
-}
-
-/* ========== CREATE GROUP LOGIC ========== */
-/* Handle creating a new group */
-async function handleCreateGroup(groupName, memberString) {
-  try {
-    /* Parse comma-separated members into array */
-    const members = memberString.split(",").map(m => m.trim()).filter(m => m);
-
-    /* Send POST request to create group endpoint */
-    const response = await fetch(`${API_BASE_URL}/group_add`, {
-      /* Set HTTP method to POST */
-      method: "POST",
-      /* Set request headers for JSON */
-      headers: {
-        /* Specify content type as JSON */
-        "Content-Type": "application/json"
-      },
-      /* Convert request body to JSON string */
-      body: JSON.stringify({
-        /* Include group name in request */
-        groupname: groupName,
-        /* Include member list in request */
-        members: members,
-        /* Include authentication token in request */
-        temp_token: authToken
-      })
-    });
-
-    /* Check if response status is not OK */
-    if (!response.ok) {
-      /* Parse error response as JSON */
-      const error = await response.json();
-      /* Show error message to user */
-      alert(`Failed to create group: ${error.message || "Unknown error"}`);
-      /* Exit function early */
-      return;
-    }
-
-    /* Show success message */
-    alert("Group created successfully!");
-
-    /* Clear group name input */
-    document.getElementById("groupName").value = "";
-    /* Clear group members input */
-    document.getElementById("groupMembers").value = "";
-    /* Get create group form element */
-    const createGroupForm = document.getElementById("createGroupForm");
-    /* Add hidden class to hide form */
-    createGroupForm.classList.add("hidden");
-
-    /* Call function to reload chat rooms */
-    loadChatRooms();
-
-  } catch (error) {
-    /* Log error to console for debugging */
-    console.error("Create group error:", error);
-    /* Show error message to user */
-    alert(`Error creating group: ${error.message}`);
-  }
-}
-
-/* ========== LOGOUT LOGIC ========== */
-/* Handle user logout */
-function handleLogout() {
-  /* Remove token from localStorage */
-  localStorage.removeItem("authToken");
-  /* Remove username from localStorage */
-  localStorage.removeItem("username");
-
-  /* Clear token from memory */
-  authToken = null;
-  /* Clear username from memory */
-  currentUsername = null;
-  /* Clear current chat name from memory */
+  document.getElementById("controlPanel").classList.remove("hidden");
+  document.getElementById("chatView").classList.add("hidden");
+  document.getElementById("chatHeader").classList.remove("active");
   currentChatName = null;
-
-  /* Show authentication screen */
-  showAuthScreen();
 }
 
-/* ========== CHAT LIST MANAGEMENT ========== */
-/* Load all available chat rooms from backend */
-async function loadChatRooms() {
+function showChatView() {
+  document.getElementById("controlPanel").classList.add("hidden");
+  document.getElementById("chatView").classList.remove("hidden");
+  document.getElementById("chatHeader").classList.add("active");
+}
+
+/* ========== LOAD DASHBOARD DATA ========== */
+async function loadDashboardData() {
   try {
-    const response = await fetch(
+    const requestsResponse = await fetch(
+      `${API_BASE_URL}/friend_requests?token=${authToken}`
+    );
+
+    if (requestsResponse.ok) {
+      const requestsData = await requestsResponse.json();
+      appState.friends = requestsData.friends || [];
+      appState.incomingRequests = requestsData.incoming_requests || [];
+      appState.outgoingRequests = requestsData.outgoing_requests || [];
+    }
+
+    const groupsResponse = await fetch(
       `${API_BASE_URL}/rooms?token=${authToken}`
     );
 
-    if (!response.ok) {
-      console.error("Failed to load rooms");
-      return;
+    if (groupsResponse.ok) {
+      const groupsData = await groupsResponse.json();
+      appState.groups = groupsData.groups || [];
     }
 
-    const data = await response.json();
-    const groups = data.groups || [];
-
-    const chatList = document.getElementById("chatList");
-    chatList.innerHTML = "";
-
-    if (groups.length === 0) {
-      const emptyState = document.createElement("p");
-      emptyState.className = "empty-state";
-      emptyState.textContent = "No groups or chats";
-      chatList.appendChild(emptyState);
-      showControlPanel();
-      return;
-    }
-
-    for (let group of groups) {
-      const chatItem = document.createElement("div");
-      chatItem.className = "chat-item";
-      chatItem.setAttribute("data-chat", group);
-      chatItem.textContent = group;
-      chatList.appendChild(chatItem);
-    }
-
-    if (!currentChatName) {
+    renderDashboard();
     showControlPanel();
-    }
 
   } catch (error) {
-    console.error("Error loading chat rooms:", error);
+    console.error("Error loading dashboard data:", error);
   }
 }
 
-/* ========== CHAT LISTENERS ========== */
-/* Attach event listeners to chat controls */
-function attachChatListeners() {
-  /* Use event delegation for chat list items since they load dynamically */
-  document.addEventListener("click", function(event) {
-    /* Check if clicked element is a chat item */
-    const chatItem = event.target.closest(".chat-item");
+function renderDashboard() {
+  renderFriendsList();
+  renderRequestsList();
+  renderGroupsList();
+}
 
-    /* If chat item was clicked */
-    if (chatItem) {
-      /* Get chat name from data attribute */
-      const chatName = chatItem.getAttribute("data-chat");
+function renderFriendsList() {
+  const friendsList = document.getElementById("friendsList");
+  friendsList.innerHTML = "";
 
-      /* Remove active class from all chat items */
-      document.querySelectorAll(".chat-item").forEach(item => {
-        /* Remove active class from each chat item */
-        item.classList.remove("active");
-      });
+  if (appState.friends.length === 0) {
+    friendsList.innerHTML = '<p class="empty-state">No friends</p>';
+    return;
+  }
 
-      /* Add active class to clicked chat item */
-      chatItem.classList.add("active");
+  for (let friend of appState.friends) {
+    const friendItem = document.createElement("div");
+    friendItem.className = "friend-item";
+    friendItem.innerHTML = `<span class="friend-name">${friend}</span>`;
+    friendsList.appendChild(friendItem);
+  }
+}
 
-      /* Store current chat name in memory */
-      currentChatName = chatName;
+function renderRequestsList() {
+  const requestsList = document.getElementById("requestsList");
+  const requestCount = document.getElementById("requestCount");
+  requestsList.innerHTML = "";
 
-      /* Get chat name heading element */
-      const chatNameElement = document.getElementById("chatName");
-      /* Set heading text to selected chat name */
-      chatNameElement.textContent = chatName;
+  const totalRequests = appState.incomingRequests.length + appState.outgoingRequests.length;
+  
+  if (totalRequests > 0) {
+    requestCount.textContent = totalRequests;
+    requestCount.style.display = "inline-block";
+  } else {
+    requestCount.style.display = "none";
+  }
 
-      /* Show chat view */
-      showChatView();
+  if (appState.incomingRequests.length === 0 && appState.outgoingRequests.length === 0) {
+    requestsList.innerHTML = '<p class="empty-state">No requests</p>';
+    return;
+  }
 
-      /* Call function to load messages for selected chat */
-      loadMessages(chatName);
-    }
+  for (let requester of appState.incomingRequests) {
+    const requestItem = document.createElement("div");
+    requestItem.className = "request-item";
+    requestItem.innerHTML = `
+      <div class="request-info">
+        <span class="request-from">${requester} (incoming)</span>
+      </div>
+      <div class="request-actions">
+        <button class="btn btn-small btn-primary" data-action="accept" data-user="${requester}">Accept</button>
+        <button class="btn btn-small btn-secondary" data-action="reject" data-user="${requester}">Reject</button>
+      </div>
+    `;
+    requestsList.appendChild(requestItem);
+  }
+
+  for (let target of appState.outgoingRequests) {
+    const requestItem = document.createElement("div");
+    requestItem.className = "request-item";
+    requestItem.innerHTML = `
+      <div class="request-info">
+        <span class="request-to">${target} (outgoing)</span>
+      </div>
+    `;
+    requestsList.appendChild(requestItem);
+  }
+
+  requestsList.querySelectorAll("[data-action]").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const action = e.target.getAttribute("data-action");
+      const user = e.target.getAttribute("data-user");
+      await handleRequestAction(action, user);
+    });
   });
+}
 
-  /* Get message form element */
-  const messageForm = document.getElementById("messageForm");
-  /* Add submit event listener to message form */
-  messageForm.addEventListener("submit", async function(event) {
-    /* Prevent default form submission behavior */
-    event.preventDefault();
+function renderGroupsList() {
+  const chatList = document.getElementById("chatList");
+  chatList.innerHTML = "";
 
-    /* Validate that a chat is selected */
-    if (!currentChatName) {
-      /* Show error if no chat selected */
-      alert("Please select a chat first");
-      /* Exit function early */
-      return;
-    }
+  if (appState.groups.length === 0) {
+    chatList.innerHTML = '<p class="empty-state">No groups</p>';
+    return;
+  }
 
-    /* Get message input element */
-    const messageInput = document.getElementById("messageInput");
-    /* Get message text from input */
-    const messageText = messageInput.value.trim();
+  for (let group of appState.groups) {
+    const chatItem = document.createElement("div");
+    chatItem.className = "chat-item";
+    chatItem.setAttribute("data-chat", group);
+    chatItem.textContent = group;
+    chatList.appendChild(chatItem);
+  }
+}
 
-    /* Validate that message is not empty */
-    if (!messageText) {
-      /* Exit function early if message is empty */
-      return;
-    }
-
-    /* Call function to send message */
-    await sendMessage(currentChatName, messageText);
-
-    /* Clear message input field */
-    messageInput.value = "";
-  });
-
-  /* Get delete chat button element */
-  const deleteChatBtn = document.getElementById("deleteChatBtn");
-  /* Add click listener to delete chat button */
-  deleteChatBtn.addEventListener("click", async function() {
-  const confirmed = confirm(`Are you sure you want to delete ${currentChatName}?`);
-
-  if (!confirmed) return;
-
+/* ========== FRIEND REQUEST HANDLING ========== */
+async function handleRequestAction(action, requester) {
   try {
-    const response = await fetch(`${API_BASE_URL}/group_delete`, {
+    const endpoint = action === "accept" ? "/friend_request_accept" : "/friend_request_reject";
+    
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        group: currentChatName,
-        temp_token: authToken
+        temp_token: authToken,
+        requester: requester
       })
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
-      alert(data.message || "Failed to delete group");
+      const error = await response.json();
+      alert(`Error: ${error.message}`);
       return;
     }
 
-    alert("Group deleted successfully");
-
-    currentChatName = null;
-    showControlPanel();
-    loadChatRooms();
+    alert(`Request ${action}ed`);
+    loadDashboardData();
 
   } catch (error) {
-    console.error("Delete error:", error);
-    alert("Error deleting group");
+    console.error("Error handling request:", error);
+    alert("Error processing request");
   }
-  const backBtn = document.getElementById("backBtn");
-
-backBtn.addEventListener("click", function () {
-  currentChatName = null;
-  showControlPanel();
-});
-});
 }
 
-/* ========== MESSAGE MANAGEMENT ========== */
-/* Load all messages for a specific chat */
+/* ========== EVENT LISTENERS ========== */
+function attachEventListeners() {
+  attachLogoutListener();
+  attachAddFriendListeners();
+  attachCreateGroupListeners();
+  attachChatListeners();
+  attachMessageListeners();
+  attachLeaveGroupListener();
+  attachDeleteGroupListener();
+  attachBackButtonListener();
+}
+
+function attachLogoutListener() {
+  const logoutBtn = document.getElementById("logoutBtn");
+  logoutBtn.addEventListener("click", () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("username");
+    authToken = null;
+    currentUsername = null;
+    currentChatName = null;
+    showAuthScreen();
+    attachAuthListeners();
+  });
+}
+
+function attachAddFriendListeners() {
+  const addFriendBtn = document.getElementById("addFriendBtn");
+  const addFriendForm = document.getElementById("addFriendForm");
+  const cancelAddFriendBtn = document.getElementById("cancelAddFriendBtn");
+  const confirmAddFriendBtn = document.getElementById("confirmAddFriendBtn");
+
+  addFriendBtn.addEventListener("click", () => {
+    addFriendForm.classList.toggle("hidden");
+  });
+
+  cancelAddFriendBtn.addEventListener("click", () => {
+    addFriendForm.classList.add("hidden");
+    document.getElementById("friendUsername").value = "";
+  });
+
+  confirmAddFriendBtn.addEventListener("click", async () => {
+    const friendUsername = document.getElementById("friendUsername").value.trim();
+
+    if (!friendUsername) {
+      alert("Please enter a username");
+      return;
+    }
+
+    await sendFriendRequest(friendUsername);
+  });
+}
+
+async function sendFriendRequest(targetUsername) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/friend_request_send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        temp_token: authToken,
+        target_username: targetUsername
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      alert(`Error: ${error.message}`);
+      return;
+    }
+
+    alert("Friend request sent!");
+    document.getElementById("friendUsername").value = "";
+    document.getElementById("addFriendForm").classList.add("hidden");
+    loadDashboardData();
+
+  } catch (error) {
+    console.error("Error sending friend request:", error);
+    alert("Error sending request");
+  }
+}
+
+function attachCreateGroupListeners() {
+  const createGroupBtn = document.getElementById("createGroupBtn");
+  const createGroupForm = document.getElementById("createGroupForm");
+  const cancelCreateGroupBtn = document.getElementById("cancelCreateGroupBtn");
+  const confirmCreateGroupBtn = document.getElementById("confirmCreateGroupBtn");
+
+  createGroupBtn.addEventListener("click", () => {
+    populateFriendCheckboxes();
+    createGroupForm.classList.toggle("hidden");
+  });
+
+  cancelCreateGroupBtn.addEventListener("click", () => {
+    createGroupForm.classList.add("hidden");
+    document.getElementById("groupName").value = "";
+  });
+
+  confirmCreateGroupBtn.addEventListener("click", async () => {
+    const groupName = document.getElementById("groupName").value.trim();
+    const checkboxes = document.querySelectorAll("#groupMembers input[type='checkbox']:checked");
+    const members = Array.from(checkboxes).map(cb => cb.value);
+
+    if (!groupName) {
+      alert("Please enter a group name");
+      return;
+    }
+
+    await createGroup(groupName, members);
+  });
+}
+
+function populateFriendCheckboxes() {
+  const groupMembers = document.getElementById("groupMembers");
+  groupMembers.innerHTML = "";
+
+  if (appState.friends.length === 0) {
+    groupMembers.innerHTML = '<p class="empty-state">No friends to add</p>';
+    return;
+  }
+
+  for (let friend of appState.friends) {
+    const label = document.createElement("label");
+    label.className = "checkbox-label";
+    label.innerHTML = `
+      <input type="checkbox" value="${friend}" />
+      <span>${friend}</span>
+    `;
+    groupMembers.appendChild(label);
+  }
+}
+
+async function createGroup(groupName, members) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/group_add`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        temp_token: authToken,
+        groupname: groupName,
+        members: members
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      alert(`Error: ${error.message}`);
+      return;
+    }
+
+    alert("Group created!");
+    document.getElementById("groupName").value = "";
+    document.getElementById("createGroupForm").classList.add("hidden");
+    loadDashboardData();
+
+  } catch (error) {
+    console.error("Error creating group:", error);
+    alert("Error creating group");
+  }
+}
+
+function attachChatListeners() {
+  document.addEventListener("click", (e) => {
+    const chatItem = e.target.closest(".chat-item");
+    if (chatItem) {
+      const chatName = chatItem.getAttribute("data-chat");
+      openChat(chatName);
+    }
+  });
+}
+
+function openChat(chatName) {
+  currentChatName = chatName;
+  document.querySelectorAll(".chat-item").forEach(item => {
+    item.classList.remove("active");
+  });
+  document.querySelector(`[data-chat="${chatName}"]`).classList.add("active");
+
+  document.getElementById("chatName").textContent = chatName;
+  showChatView();
+  loadMessages(chatName);
+}
 
 async function loadMessages(chatName) {
   try {
@@ -733,107 +522,180 @@ async function loadMessages(chatName) {
     );
 
     if (!response.ok) {
-      const error = await response.json();
-      console.error("Failed to load messages:", error);
+      console.error("Failed to load messages");
       return;
     }
 
     const data = await response.json();
-
-    renderMessages(data.messages || []);
+    appState.currentMessages = data.messages || [];
+    renderMessages();
 
   } catch (error) {
     console.error("Error loading messages:", error);
   }
 }
 
-
-/* ========== RENDER MESSAGES ========== */
-/* Render messages in the message container */
-function renderMessages(messages) {
-  /* Get message container element */
+function renderMessages() {
   const messageContainer = document.getElementById("messageContainer");
-  /* Clear existing messages */
   messageContainer.innerHTML = "";
 
-  /* Loop through each message in the array */
-  for (let msg of messages) {
-    /* Create new div element for message */
+  for (let msg of appState.currentMessages) {
     const messageDiv = document.createElement("div");
-    /* Add message class for styling */
     messageDiv.className = "message";
 
-    /* Check if message is from current user */
     if (msg.sender === currentUsername) {
-      /* Add own class to style own messages differently */
       messageDiv.classList.add("own");
     }
 
-    /* Create sender name element */
     const senderDiv = document.createElement("div");
-    /* Add message-sender class for styling */
     senderDiv.className = "message-sender";
-    /* Set text content to sender name */
     senderDiv.textContent = msg.sender;
 
-    /* Create message text element */
     const textDiv = document.createElement("div");
-    /* Add message-text class for styling */
     textDiv.className = "message-text";
-    /* Set text content to message text */
     textDiv.textContent = msg.text || msg.ciphertext || "";
 
-    /* Create timestamp element */
     const timeDiv = document.createElement("div");
-    /* Add message-timestamp class for styling */
     timeDiv.className = "message-timestamp";
-    /* Convert timestamp to readable format */
     const timestamp = new Date(msg.timestamp);
-    /* Format timestamp as time string */
     timeDiv.textContent = timestamp.toLocaleTimeString();
 
-    /* Append sender to message div */
     messageDiv.appendChild(senderDiv);
-    /* Append text to message div */
     messageDiv.appendChild(textDiv);
-    /* Append timestamp to message div */
     messageDiv.appendChild(timeDiv);
-
-    /* Append message to message container */
     messageContainer.appendChild(messageDiv);
   }
 
-  /* Scroll to bottom of message container to show latest message */
   messageContainer.scrollTop = messageContainer.scrollHeight;
 }
 
-/* ========== SEND MESSAGE ========== */
-/* Send a message to the current chat */
+function attachMessageListeners() {
+  const messageForm = document.getElementById("messageForm");
+  messageForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    if (!currentChatName) {
+      alert("Please select a chat first");
+      return;
+    }
+
+    const messageInput = document.getElementById("messageInput");
+    const messageText = messageInput.value.trim();
+
+    if (!messageText) {
+      return;
+    }
+
+    await sendMessage(currentChatName, messageText);
+    messageInput.value = "";
+  });
+}
+
 async function sendMessage(chatName, messageText) {
   try {
     const response = await fetch(`${API_BASE_URL}/messages`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        temp_token: authToken,
         ciphertext: messageText,
-        group: chatName,
-        temp_token: authToken
+        group: chatName
       })
     });
 
     if (!response.ok) {
       const error = await response.json();
-      alert(`Failed to send message: ${error.message || "Unknown error"}`);
+      alert(`Error: ${error.message}`);
       return;
     }
 
-    // Reload messages after sending
     await loadMessages(chatName);
 
   } catch (error) {
     console.error("Error sending message:", error);
     alert("Error sending message");
   }
+}
+
+function attachLeaveGroupListener() {
+  const leaveGroupBtn = document.getElementById("leaveGroupBtn");
+  leaveGroupBtn.addEventListener("click", async () => {
+    if (!currentChatName) {
+      alert("No group selected");
+      return;
+    }
+
+    const confirmed = confirm(`Are you sure you want to leave ${currentChatName}?`);
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/group_leave`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          temp_token: authToken,
+          group: currentChatName
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Error: ${error.message}`);
+        return;
+      }
+
+      alert("Left group successfully");
+      showControlPanel();
+      loadDashboardData();
+
+    } catch (error) {
+      console.error("Error leaving group:", error);
+      alert("Error leaving group");
+    }
+  });
+}
+
+function attachDeleteGroupListener() {
+  const deleteChatBtn = document.getElementById("deleteChatBtn");
+  deleteChatBtn.addEventListener("click", async () => {
+    if (!currentChatName) {
+      alert("No group selected");
+      return;
+    }
+
+    const confirmed = confirm(`Are you sure you want to delete ${currentChatName}?`);
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/group_delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          temp_token: authToken,
+          group: currentChatName
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Error: ${error.message}`);
+        return;
+      }
+
+      alert("Group deleted successfully");
+      showControlPanel();
+      loadDashboardData();
+
+    } catch (error) {
+      console.error("Error deleting group:", error);
+      alert("Error deleting group");
+    }
+  });
+}
+
+function attachBackButtonListener() {
+  const backBtn = document.getElementById("backBtn");
+  backBtn.addEventListener("click", () => {
+    showControlPanel();
+  });
 }
