@@ -1083,11 +1083,6 @@ body {
   display: block;
 }
 
-/* Requests list container */
-.requests-list {
-  /* No additional styling needed */
-}
-
 /* Request item in list */
 .request-item {
   /* Padding around item */

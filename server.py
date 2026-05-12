@@ -1,25 +1,15 @@
-# Import Flask web framework for creating HTTP server
-from flask import Flask, request, jsonify
 
-# Import bcrypt library for secure password hashing
-import bcrypt
-
-# Import secrets library for generating secure random tokens
-import secrets
-
-# Import json library for reading and writing JSON files
+# ========== IMPORTS ==========
+# Standard library imports
 import json
-
-# Import os library for file system operations
 import os
-
-# Import uuid library for generating unique group IDs
+import secrets
+from datetime import datetime
 from uuid import uuid4
 
-# Import datetime for storing message timestamps
-from datetime import datetime
-
-# Import CORS to allow requests from frontend JavaScript
+# Third-party library imports
+import bcrypt
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # ========== APPLICATION SETUP ==========
