@@ -725,20 +725,20 @@ body {
 /* ========== CHAT VIEW STYLES ========== */
 /* Chat view container */
 .chat-view {
-  /* Use flex for vertical layout */
-  display: flex;
   /* Stack items vertically */
   flex-direction: column;
   /* Fill full height */
   height: 100%;
   /* Initially hide */
   display: none;
+  /* Take up all available space */
+  flex: 1;
 }
 
 /* Show chat view when active */
 .chat-view.active {
   /* Display flex to show */
-  display: flex;
+  display: flex !important;
 }
 
 /* Message container */

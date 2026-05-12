@@ -169,6 +169,7 @@ function showDashboard() {
 function showControlPanel() {
   document.getElementById("controlPanel").classList.remove("hidden");
   document.getElementById("chatView").classList.add("hidden");
+  document.getElementById("chatView").classList.remove("active");
   document.getElementById("chatHeader").classList.remove("active");
   currentChatName = null;
 }
@@ -176,6 +177,7 @@ function showControlPanel() {
 function showChatView() {
   document.getElementById("controlPanel").classList.add("hidden");
   document.getElementById("chatView").classList.remove("hidden");
+  document.getElementById("chatView").classList.add("active");
   document.getElementById("chatHeader").classList.add("active");
 }
 
