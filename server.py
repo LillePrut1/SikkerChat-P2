@@ -197,7 +197,30 @@ def are_friends(user1, user2):
     # Return False if not friends
     return False
 
-# ========== AUTHENTICATION ROUTES ==========
+# ========== PASSWORD VALIDATION =========
+
+def validate_password(password):
+    """Validate password meets security requirements
+    - Minimum 8 characters
+    - At least 1 uppercase letter
+    - At least 1 lowercase letter
+    - At least 1 number
+    - At least 1 symbol (!@#$%^&*)
+    Returns: (is_valid, error_message)
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters"
+    if not any(c.isupper() for c in password):
+        return False, "Password must contain at least 1 uppercase letter"
+    if not any(c.islower() for c in password):
+        return False, "Password must contain at least 1 lowercase letter"
+    if not any(c.isdigit() for c in password):
+        return False, "Password must contain at least 1 number"
+    if not any(c in "!@#$%^&*()-_=+[]{}|;:,.<>?" for c in password):
+        return False, "Password must contain at least 1 symbol (!@#$%^&*)"
+    return True, "Password is valid"
+
+# ========== AUTHENTICATION ROUTES =========
 
 # Health check endpoint to verify server is running
 @app.route("/health", methods=["GET"])
@@ -234,10 +257,10 @@ def register():
         # Return error if password is empty
         return jsonify({"message": "Password required"}), 400
     
-    # Validate password meets minimum length
-    if len(password) < 6:
-        # Return error if password too short
-        return jsonify({"message": "Password must be at least 6 characters"}), 400
+    # Validate password meets security requirements
+    is_valid, error_msg = validate_password(password)
+    if not is_valid:
+        return jsonify({"message": error_msg}), 400
     
     # Load all existing users from storage
     users = load_users()
@@ -879,50 +902,59 @@ def delete_group():
 # Leave a group
 @app.route("/group_leave", methods=["POST"])
 def leave_group():
-    """Remove user from a group"""
-    # Get JSON data from request body
+    """Remove user from a group. If admin leaves, transfer admin or delete group."""
     data = request.get_json()
-
-    # Validate request body exists
     if not data:
         return jsonify({"message": "Request body required"}), 400
-
-    # Extract token from request
     token = data.get("temp_token")
-    
-    # Get group name from request
     group_name = data.get("group")
-
-    # Validate both token and group name exist
     if not token or not group_name:
         return jsonify({"message": "Token and group required"}), 400
-
-    # Get username from token
     username = get_user_from_token(token)
-
-    # Validate token is valid
     if not username:
         return jsonify({"message": "Invalid token"}), 401
-
-    # Find group ID by name
     group_id = find_group_id_by_name(group_name)
-
-    # Validate group exists
     if not group_id:
         return jsonify({"message": "Group not found"}), 404
-
-    # Validate user is member of group
     if not check_membership(username, group_id):
         return jsonify({"message": "Not a member of this group"}), 403
 
-    # Load user's membership data
+    # Load group data
+    group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
+    group_data = load_json(group_file)
+
+    # Remove group from user's membership
     membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
     membership_data = load_json(membership_file)
-
-    # Remove group from user's groups list
     if group_id in membership_data.get("groups", []):
         membership_data["groups"].remove(group_id)
         save_json(membership_file, membership_data)
+
+    # Get all current members of the group
+    all_users = load_users()
+    members = []
+    for user in all_users:
+        m_file = os.path.join(MEMBERSHIPS_DIR, f"{user}.json")
+        m_data = load_json(m_file)
+        if group_id in m_data.get("groups", []):
+            members.append(user)
+
+    # If leaving user is admin/creator
+    if group_data.get("creator") == username:
+        if members:
+            # Transfer admin to next member (alphabetical)
+            new_admin = sorted(members)[0]
+            group_data["creator"] = new_admin
+            save_json(group_file, group_data)
+            return jsonify({"message": f"Left group. Admin transferred to {new_admin}"}), 200
+        else:
+            # No members left, delete group and messages
+            if os.path.exists(group_file):
+                os.remove(group_file)
+            messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
+            if os.path.exists(messages_file):
+                os.remove(messages_file)
+            return jsonify({"message": "Left group. Group deleted (no members left)"}), 200
 
     return jsonify({"message": "Left group successfully"}), 200
 

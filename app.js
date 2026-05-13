@@ -495,14 +495,20 @@ async function createGroup(groupName, members) {
   }
 }
 
+
+let chatListenerAttached = false;
 function attachChatListeners() {
-  document.addEventListener("click", (e) => {
-    const chatItem = e.target.closest(".chat-item");
-    if (chatItem) {
-      const chatName = chatItem.getAttribute("data-chat");
-      openChat(chatName);
-    }
-  });
+  if (chatListenerAttached) return;
+  document.addEventListener("click", chatClickHandler);
+  chatListenerAttached = true;
+}
+
+function chatClickHandler(e) {
+  const chatItem = e.target.closest(".chat-item");
+  if (chatItem) {
+    const chatName = chatItem.getAttribute("data-chat");
+    openChat(chatName);
+  }
 }
 
 function openChat(chatName) {

@@ -724,38 +724,28 @@ body {
 
 /* ========== CHAT VIEW STYLES ========== */
 /* Chat view container */
+
 .chat-view {
-  /* Stack items vertically */
+  display: flex;
   flex-direction: column;
-  /* Fill full height */
   height: 100%;
-  /* Initially hide */
-  display: none;
-  /* Take up all available space */
   flex: 1;
 }
 
 /* Show chat view when active */
 .chat-view.active {
-  /* Display flex to show */
   display: flex !important;
 }
 
 /* Message container */
 .message-container {
-  /* Use flex for vertical layout */
   display: flex;
-  /* Stack items vertically */
   flex-direction: column;
-  /* Add gap between messages */
   gap: 12px;
-  /* Add padding */
   padding: 16px 24px;
-  /* Allow overflow for scrolling */
   overflow-y: auto;
-  /* Set flex to grow and fill space */
   flex: 1;
-  /* Align content to start */
+  min-height: 0;
   align-content: flex-start;
 }
 
@@ -861,15 +851,13 @@ body {
 
 /* Message input section */
 .message-input-section {
-  /* Add padding */
   padding: 16px 24px;
-  /* Add border top */
   border-top: 1px solid var(--border);
-  /* Add background */
   background: var(--bg-secondary);
-  /* Keep fixed at bottom */
-  position: relative;
-  /* Prevent overflow */
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  z-index: 2;
   overflow: visible;
 }
 
