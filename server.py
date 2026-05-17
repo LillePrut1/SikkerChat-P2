@@ -1,213 +1,235 @@
-
 # ========== IMPORTS ==========
-# Standard library imports
 import json
 import os
 import secrets
 from datetime import datetime
 from uuid import uuid4
-
-# Third-party library imports
+from functools import wraps
 import bcrypt
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 
 # ========== APPLICATION SETUP ==========
-
-# Create Flask application instance
 app = Flask(__name__)
-
-# Enable CORS for all routes to allow browser requests
 CORS(app)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
-# Define base directory path for data storage
+# ========== DATA DIRECTORY CONFIGURATION ==========
 DATA_DIR = "data"
-
-# Define path to users JSON file
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
-
-# Define path to directory containing group files
 GROUPS_DIR = os.path.join(DATA_DIR, "groups")
-
-# Define path to directory containing membership files
 MEMBERSHIPS_DIR = os.path.join(DATA_DIR, "memberships")
-
-# Define path to directory containing message files
 MESSAGES_DIR = os.path.join(DATA_DIR, "messages")
-
-# Define path to directory containing friend relationship files
 FRIENDS_DIR = os.path.join(DATA_DIR, "friends")
+ROLES_DIR = os.path.join(DATA_DIR, "roles")
+GROUP_KEYS_DIR = os.path.join(DATA_DIR, "group_keys")
 
 # ========== DIRECTORY INITIALIZATION ==========
+def initialize_directories():
+    """Create all required data directories"""
+    directories = [DATA_DIR, GROUPS_DIR, MEMBERSHIPS_DIR, MESSAGES_DIR, FRIENDS_DIR, ROLES_DIR, GROUP_KEYS_DIR]
+    for directory in directories:
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
-# Create data directory if it does not exist
-if not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR)
+initialize_directories()
 
-# Create groups directory if it does not exist
-if not os.path.exists(GROUPS_DIR):
-    os.makedirs(GROUPS_DIR)
+# ========== SECURITY HEADERS MIDDLEWARE ==========
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to prevent attacks"""
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; script-src 'self'; style-src 'self'; "
+        "img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    )
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
 
-# Create memberships directory if it does not exist
-if not os.path.exists(MEMBERSHIPS_DIR):
-    os.makedirs(MEMBERSHIPS_DIR)
+# ========== STATIC FILE SERVING ==========
+@app.route("/", methods=["GET"])
+def serve_root():
+    """Serve the main application HTML file"""
+    try:
+        with open("index.html", "r") as f:
+            html_content = f.read()
+        return html_content, 200, {"Content-Type": "text/html"}
+    except FileNotFoundError:
+        return jsonify({"message": "Application file not found"}), 404
 
-# Create messages directory if it does not exist
-if not os.path.exists(MESSAGES_DIR):
-    os.makedirs(MESSAGES_DIR)
-
-# Create friends directory if it does not exist
-if not os.path.exists(FRIENDS_DIR):
-    os.makedirs(FRIENDS_DIR)
+@app.route("/<path:filename>", methods=["GET"])
+def serve_static(filename):
+    """Serve static files (CSS, JS)"""
+    try:
+        # Security: only serve files from current directory
+        # Prevent directory traversal attacks
+        if ".." in filename or filename.startswith("/"):
+            return jsonify({"message": "Access denied"}), 403
+        
+        # Determine content type
+        content_type = "text/plain"
+        if filename.endswith(".css"):
+            content_type = "text/css"
+        elif filename.endswith(".js"):
+            content_type = "text/javascript"
+        elif filename.endswith(".html"):
+            content_type = "text/html"
+        elif filename.endswith(".json"):
+            content_type = "application/json"
+        
+        with open(filename, "r") as f:
+            content = f.read()
+        
+        return content, 200, {"Content-Type": content_type}
+    
+    except FileNotFoundError:
+        return jsonify({"message": "File not found"}), 404
+    except Exception as e:
+        print(f"Error serving {filename}: {str(e)}")
+        return jsonify({"message": "Server error"}), 500
 
 # ========== HELPER FUNCTIONS ==========
-
-# Load JSON data from a file path
 def load_json(file_path):
-    """Load data from JSON file, return empty dict if file not found"""
-    # Check if file path exists
+    """Load JSON data from file with error handling"""
     if not os.path.exists(file_path):
-        # Return empty dictionary if file doesn't exist
         return {}
-    
-    # Try to read and parse file
     try:
-        # Open file in read mode
         with open(file_path, 'r') as f:
-            # Parse JSON content and return
             return json.load(f)
-    # Catch any errors while reading
-    except:
-        # Return empty dictionary on error
+    except Exception as e:
+        print(f"Error loading JSON from {file_path}: {str(e)}")
         return {}
 
-# Save JSON data to a file path
 def save_json(file_path, data):
-    """Save data to JSON file with directory creation"""
-    # Get directory path from file path
+    """Save Python dictionary to JSON file"""
     directory = os.path.dirname(file_path)
-    
-    # Create directory if path is not empty and doesn't exist
     if directory and not os.path.exists(directory):
-        # Create all parent directories
         os.makedirs(directory)
-    
-    # Open file in write mode
-    with open(file_path, 'w') as f:
-        # Write data as formatted JSON
-        json.dump(data, f, indent=2)
+    try:
+        with open(file_path, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"Error saving JSON to {file_path}: {str(e)}")
 
-# Load all user data from users.json file
 def load_users():
     """Load all registered users from storage"""
-    # Load and return users JSON file
     return load_json(USERS_FILE)
 
-# Save all user data to users.json file
 def save_users(users):
-    """Save all users to storage"""
-    # Save users dictionary to JSON file
+    """Save all users to persistent storage"""
     save_json(USERS_FILE, users)
 
-# Get username associated with a token
+
+def save_group_key(group_id, username, encrypted_group_key):
+    """Save encrypted group key for a specific user and group"""
+    group_key_file = os.path.join(GROUP_KEYS_DIR, f"{group_id}_{username}.json")
+    save_json(group_key_file, {
+        "group_id": group_id,
+        "username": username,
+        "encrypted_group_key": encrypted_group_key,
+        "created_at": datetime.now().isoformat()
+    })
+
+
+def load_group_key(group_id, username):
+    """Load encrypted group key for a specific user and group"""
+    group_key_file = os.path.join(GROUP_KEYS_DIR, f"{group_id}_{username}.json")
+    data = load_json(group_key_file)
+    return data.get("encrypted_group_key")
+
+
 def get_user_from_token(token):
-    """Validate token and return associated username"""
-    # Load all users from storage
+    """Validate session token and return associated username"""
+    if not token:
+        return None
     users = load_users()
-    
-    # Loop through each user in dictionary
     for username, user_data in users.items():
-        # Check if token matches this user's stored token
         if user_data.get("temp_token") == token:
-            # Return username if token is valid
             return username
-    
-    # Return None if token not found
     return None
 
-# Extract and validate token from request
 def get_token_from_request():
-    """Extract token from request body"""
-    # Get JSON data from request body
-    data = request.get_json() or {}
-    
-    # Extract temp_token from request data
-    token = data.get("temp_token")
-    
-    # Return token (may be None)
-    return token
+    """Extract authentication token from request"""
+    # For GET requests, use the query parameter only.
+    if request.method == "GET":
+        return request.args.get("token")
 
-# Check if user is member of group
+    # For other methods, allow token in either query or JSON body.
+    token = request.args.get("token")
+    if token:
+        return token
+
+    if request.content_type and request.content_type.startswith("application/json"):
+        data = request.get_json(silent=True) or {}
+        return data.get("temp_token")
+
+    return None
+
+def require_auth(f):
+    """Decorator to require valid authentication token"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = get_token_from_request()
+        if not token:
+            return jsonify({"message": "Token required"}), 401
+        username = get_user_from_token(token)
+        if not username:
+            return jsonify({"message": "Invalid or expired token"}), 401
+        return f(username, *args, **kwargs)
+    return decorated_function
+
 def check_membership(username, group_id):
-    """Verify user belongs to specified group"""
-    # Build file path for user's membership file
+    """Verify that user is a member of specified group"""
     membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
-    
-    # Load user's membership data
     memberships = load_json(membership_file)
-    
-    # Check if groups list exists in memberships
     if "groups" in memberships:
-        # Check if group_id is in user's groups
         if group_id in memberships["groups"]:
-            # Return True if user is member
             return True
-    
-    # Return False if user is not member
     return False
 
-# Find group ID by group name
+def get_user_role_in_group(username, group_id):
+    """Get user's role in specific group"""
+    roles_file = os.path.join(ROLES_DIR, f"{group_id}.json")
+    roles_data = load_json(roles_file)
+    if username in roles_data:
+        return roles_data[username]
+    return 'member'
+
+def set_user_role_in_group(username, group_id, role):
+    """Set user's role in specific group"""
+    roles_file = os.path.join(ROLES_DIR, f"{group_id}.json")
+    roles_data = load_json(roles_file)
+    roles_data[username] = role
+    save_json(roles_file, roles_data)
+
 def find_group_id_by_name(group_name):
     """Search through all groups to find ID matching name"""
-    # Check if groups directory exists
     if not os.path.exists(GROUPS_DIR):
-        # Return None if directory doesn't exist
         return None
-    
-    # Loop through all files in groups directory
     for filename in os.listdir(GROUPS_DIR):
-        # Build full path to group file
         group_file = os.path.join(GROUPS_DIR, filename)
-        
-        # Load group data
         group_data = load_json(group_file)
-        
-        # Check if group name matches
         if group_data.get("group_name") == group_name:
-            # Extract group ID by removing .json extension
             group_id = filename.replace(".json", "")
-            # Return found group ID
             return group_id
-    
-    # Return None if group not found
     return None
 
-# Check if two users are friends
 def are_friends(user1, user2):
     """Verify two users are friends with each other"""
-    # Load user1's friend data
-    user1_file = os.path.join(FRIENDS_DIR, f"{user1}.json")
+    user1_lower = user1.lower()
+    user2_lower = user2.lower()
+    user1_file = os.path.join(FRIENDS_DIR, f"{user1_lower}.json")
     user1_data = load_json(user1_file)
-    
-    # Check if user2 is in user1's friends list
-    if user2 in user1_data.get("friends", []):
-        # Return True if friend relationship exists
+    if user2_lower in [f.lower() for f in user1_data.get("friends", [])]:
         return True
-    
-    # Return False if not friends
     return False
 
 # ========== PASSWORD VALIDATION =========
-
 def validate_password(password):
-    """Validate password meets security requirements
-    - Minimum 8 characters
-    - At least 1 uppercase letter
-    - At least 1 lowercase letter
-    - At least 1 number
-    - At least 1 symbol (!@#$%^&*)
-    Returns: (is_valid, error_message)
-    """
+    """Validate password meets security requirements"""
     if len(password) < 8:
         return False, "Password must be at least 8 characters"
     if not any(c.isupper() for c in password):
@@ -216,83 +238,73 @@ def validate_password(password):
         return False, "Password must contain at least 1 lowercase letter"
     if not any(c.isdigit() for c in password):
         return False, "Password must contain at least 1 number"
-    if not any(c in "!@#$%^&*()-_=+[]{}|;:,.<>?" for c in password):
-        return False, "Password must contain at least 1 symbol (!@#$%^&*)"
+    allowed_symbols = "!@#$%^&*()-_=+[]{}|;:,.<>?"
+    if not any(c in allowed_symbols for c in password):
+        return False, f"Password must contain at least 1 symbol"
     return True, "Password is valid"
 
-# ========== AUTHENTICATION ROUTES =========
+def validate_username(username):
+    """Validate username meets security requirements"""
+    if not username or len(username.strip()) == 0:
+        return False, "Username cannot be empty"
+    trimmed = username.strip()
+    if len(trimmed) < 3:
+        return False, "Username must be at least 3 characters"
+    if len(trimmed) > 20:
+        return False, "Username must not exceed 20 characters"
+    if not all(c.isalnum() or c == '_' for c in trimmed):
+        return False, "Username can only contain letters, numbers, and underscores"
+    return True, "Username is valid"
 
-# Health check endpoint to verify server is running
+# ========== AUTHENTICATION ROUTES =========
 @app.route("/health", methods=["GET"])
 def health():
-    """Health check endpoint for server status"""
-    # Return JSON response indicating server is operational
-    return jsonify({"status": "ok"}), 200
+    """Health check endpoint"""
+    return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()}), 200
 
-# Register new user with username and password
 @app.route("/register", methods=["POST"])
 def register():
     """Register new user account"""
-    # Get JSON data from request body
     data = request.get_json()
-    
-    # Check if request body contains data
     if not data:
-        # Return error if no data provided
         return jsonify({"message": "Request body required"}), 400
     
-    # Extract username from request data
     username = data.get("username", "").strip()
-    
-    # Extract password from request data
     password = data.get("password", "")
     
-    # Validate username was provided
-    if not username:
-        # Return error if username is empty
-        return jsonify({"message": "Username required"}), 400
+    is_valid_username, username_error = validate_username(username)
+    if not is_valid_username:
+        return jsonify({"message": username_error}), 400
     
-    # Validate password was provided
     if not password:
-        # Return error if password is empty
         return jsonify({"message": "Password required"}), 400
     
-    # Validate password meets security requirements
-    is_valid, error_msg = validate_password(password)
-    if not is_valid:
-        return jsonify({"message": error_msg}), 400
+    is_valid_password, password_error = validate_password(password)
+    if not is_valid_password:
+        return jsonify({"message": password_error}), 400
     
-    # Load all existing users from storage
     users = load_users()
+    existing_usernames = {u.lower(): u for u in users.keys()}
     
-    # Check if username already exists
-    if username in users:
-        # Return error if username taken
+    if username.lower() in existing_usernames:
         return jsonify({"message": "Username already exists"}), 409
     
-    # Hash password using bcrypt with salt
-    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
-    # Create new user entry in users dictionary
     users[username] = {
-        # Store hashed password (never store plaintext)
         "password_hash": password_hash,
-        # Initialize temp_token as None (set on login)
         "temp_token": None,
-        # Store public_key placeholder for future E2EE
-        "public_key": None
+        "public_key": data.get("public_key"),
+        "signature_public_key": data.get("signature_public_key"),
+        "created_at": datetime.now().isoformat(),
+        "role": "user"
     }
     
-    # Save updated users to storage
     save_users(users)
     
-    # Create membership file for new user
     membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
-    
-    # Initialize empty groups list for new user
     save_json(membership_file, {"groups": []})
     
-    # Create friend data file for new user
     friend_file = os.path.join(FRIENDS_DIR, f"{username}.json")
     save_json(friend_file, {
         "friends": [],
@@ -300,160 +312,117 @@ def register():
         "outgoing_requests": []
     })
     
-    # Return success response with 201 status code
     return jsonify({"message": "Registration successful"}), 201
 
-# Authenticate user and return session token
 @app.route("/login", methods=["POST"])
 def login():
     """Authenticate user and issue session token"""
-    # Get JSON data from request body
     data = request.get_json()
     
-    # Check if request body contains data
     if not data:
-        # Return error if no data provided
         return jsonify({"message": "Request body required"}), 400
     
-    # Extract username from request data
     username = data.get("username", "").strip()
-    
-    # Extract password from request data
     password = data.get("password", "")
+    public_key = data.get("public_key")
     
-    # Validate username was provided
     if not username:
-        # Return error if username empty
-        return jsonify({"message": "Username required"}), 400
+        return jsonify({"message": "Invalid credentials"}), 401
     
-    # Validate password was provided
     if not password:
-        # Return error if password empty
-        return jsonify({"message": "Password required"}), 400
+        return jsonify({"message": "Invalid credentials"}), 401
     
-    # Load all users from storage
     users = load_users()
     
-    # Check if username exists in users
-    if username not in users:
-        # Return generic error for security
+    user_key = None
+    for key in users.keys():
+        if key.lower() == username.lower():
+            user_key = key
+            break
+    
+    if not user_key:
         return jsonify({"message": "Invalid credentials"}), 401
     
-    # Get user data from users dictionary
-    user_data = users[username]
-    
-    # Get stored password hash
+    user_data = users[user_key]
     password_hash = user_data.get("password_hash")
     
-    # Verify provided password matches stored hash
-    if not bcrypt.checkpw(password.encode(), password_hash.encode()):
-        # Return generic error for security
+    if not password_hash or not bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
         return jsonify({"message": "Invalid credentials"}), 401
     
-    # Generate secure random token for this session
+    if public_key:
+        user_data["public_key"] = public_key
+    signature_public_key = data.get("signature_public_key")
+    if signature_public_key:
+        user_data["signature_public_key"] = signature_public_key
+    
     token = secrets.token_urlsafe(32)
-    
-    # Update user's temp_token in memory
     user_data["temp_token"] = token
+    user_data["last_login"] = datetime.now().isoformat()
     
-    # Save updated users back to storage
     save_users(users)
     
-    # Return token to client in response
-    return jsonify({"token": token}), 200
+    return jsonify({
+        "token": token,
+        "username": user_key,
+        "message": "Login successful"
+    }), 200
 
-# ========== FRIEND SYSTEM ROUTES ==========
-
-# Send a friend request to another user
+# ========== FRIEND SYSTEM ROUTES =========
 @app.route("/friend_request_send", methods=["POST"])
-def send_friend_request():
+@require_auth
+def send_friend_request(username):
     """Send friend request to target user"""
-    # Get JSON data from request body
     data = request.get_json()
-    
-    # Validate request body exists
     if not data:
         return jsonify({"message": "Request body required"}), 400
     
-    # Extract token from request
-    token = data.get("temp_token")
-    
-    # Validate token exists
-    if not token:
-        return jsonify({"message": "Token required"}), 401
-    
-    # Get username from token
-    requester = get_user_from_token(token)
-    
-    # Validate token is valid
-    if not requester:
-        return jsonify({"message": "Invalid token"}), 401
-    
-    # Get target username from request
     target_username = data.get("target_username", "").strip()
-    
-    # Validate target username exists
     if not target_username:
         return jsonify({"message": "Target username required"}), 400
     
-    # Check if target user exists
     users = load_users()
-    if target_username not in users:
+    target_user_key = None
+    for key in users.keys():
+        if key.lower() == target_username.lower():
+            target_user_key = key
+            break
+    
+    if not target_user_key:
         return jsonify({"message": "User not found"}), 404
     
-    # Check if trying to friend self
-    if requester.lower() == target_username.lower():
+    if username.lower() == target_user_key.lower():
         return jsonify({"message": "Cannot send friend request to yourself"}), 400
     
-    # Load requester's friend data
-    requester_file = os.path.join(FRIENDS_DIR, f"{requester}.json")
+    requester_file = os.path.join(FRIENDS_DIR, f"{username}.json")
     requester_data = load_json(requester_file)
     
-    # Load target's friend data
-    target_file = os.path.join(FRIENDS_DIR, f"{target_username}.json")
+    target_file = os.path.join(FRIENDS_DIR, f"{target_user_key}.json")
     target_data = load_json(target_file)
     
-    # Check if already friends
-    if target_username in requester_data.get("friends", []):
+    friends_lower = [f.lower() for f in requester_data.get("friends", [])]
+    if target_user_key.lower() in friends_lower:
         return jsonify({"message": "Already friends with this user"}), 409
     
-    # Check if request already sent
-    if target_username in requester_data.get("outgoing_requests", []):
+    outgoing_lower = [f.lower() for f in requester_data.get("outgoing_requests", [])]
+    if target_user_key.lower() in outgoing_lower:
         return jsonify({"message": "Friend request already sent"}), 409
     
-    # Check if already have incoming request from this user
-    if target_username in requester_data.get("incoming_requests", []):
+    incoming_lower = [f.lower() for f in requester_data.get("incoming_requests", [])]
+    if target_user_key.lower() in incoming_lower:
         return jsonify({"message": "This user already sent you a friend request"}), 409
     
-    # Add to requester's outgoing requests
-    requester_data.setdefault("outgoing_requests", []).append(target_username)
+    requester_data.setdefault("outgoing_requests", []).append(target_user_key)
     save_json(requester_file, requester_data)
     
-    # Add to target's incoming requests
-    target_data.setdefault("incoming_requests", []).append(requester)
+    target_data.setdefault("incoming_requests", []).append(username)
     save_json(target_file, target_data)
     
     return jsonify({"message": "Friend request sent"}), 201
 
-# Get all friend requests for current user
 @app.route("/friend_requests", methods=["GET"])
-def get_friend_requests():
-    """Get incoming and outgoing friend requests"""
-    # Get token from query parameter
-    token = request.args.get("token")
-    
-    # Validate token exists
-    if not token:
-        return jsonify({"message": "Token required"}), 401
-    
-    # Get username from token
-    username = get_user_from_token(token)
-    
-    # Validate token is valid
-    if not username:
-        return jsonify({"message": "Invalid token"}), 401
-    
-    # Load user's friend data
+@require_auth
+def get_friend_requests(username):
+    """Get incoming requests, outgoing requests, and friends list"""
     friend_file = os.path.join(FRIENDS_DIR, f"{username}.json")
     friend_data = load_json(friend_file)
     
@@ -463,520 +432,471 @@ def get_friend_requests():
         "friends": friend_data.get("friends", [])
     }), 200
 
-# Accept a friend request
+@app.route("/public_key", methods=["GET"])
+@require_auth
+def get_public_key(username):
+    """Retrieve the stored public key for a user"""
+    target_username = request.args.get("username", "").strip()
+    if not target_username:
+        return jsonify({"message": "Username required"}), 400
+
+    key_type = request.args.get("type", "encryption").strip().lower()
+    users = load_users()
+    target_user_data = None
+    for key, user_data in users.items():
+        if key.lower() == target_username.lower():
+            target_user_data = user_data
+            target_username = key
+            break
+
+    if not target_user_data:
+        return jsonify({"message": "User not found"}), 404
+
+    if key_type == "signature":
+        public_key = target_user_data.get("signature_public_key") or target_user_data.get("public_key")
+    else:
+        public_key = target_user_data.get("public_key")
+
+    if not public_key:
+        return jsonify({"message": "Public key not found"}), 404
+
+    return jsonify({"username": target_username, "public_key": public_key}), 200
+
+@app.route("/group_key", methods=["GET"])
+@require_auth
+def get_group_key(username):
+    """Retrieve the encrypted group key for a user in a group"""
+    group_name = request.args.get("group", "").strip()
+    if not group_name:
+        return jsonify({"message": "Group name required"}), 400
+
+    group_id = find_group_id_by_name(group_name)
+    if not group_id:
+        return jsonify({"message": "Group not found"}), 404
+
+    if not check_membership(username, group_id):
+        return jsonify({"message": "Access denied"}), 403
+
+    encrypted_group_key = load_group_key(group_id, username)
+    if not encrypted_group_key:
+        return jsonify({"message": "Encrypted group key not found"}), 404
+
+    return jsonify({"group_id": group_id, "encrypted_group_key": encrypted_group_key}), 200
+
 @app.route("/friend_request_accept", methods=["POST"])
-def accept_friend_request():
+@require_auth
+def accept_friend_request(username):
     """Accept incoming friend request"""
-    # Get JSON data from request body
     data = request.get_json()
-    
-    # Validate request body exists
     if not data:
         return jsonify({"message": "Request body required"}), 400
     
-    # Extract token from request
-    token = data.get("temp_token")
-    
-    # Validate token exists
-    if not token:
-        return jsonify({"message": "Token required"}), 401
-    
-    # Get username from token (the acceptor)
-    acceptor = get_user_from_token(token)
-    
-    # Validate token is valid
-    if not acceptor:
-        return jsonify({"message": "Invalid token"}), 401
-    
-    # Get requester username from request
     requester = data.get("requester", "").strip()
-    
-    # Validate requester username exists
     if not requester:
         return jsonify({"message": "Requester username required"}), 400
     
-    # Load acceptor's friend data
-    acceptor_file = os.path.join(FRIENDS_DIR, f"{acceptor}.json")
+    acceptor_file = os.path.join(FRIENDS_DIR, f"{username}.json")
     acceptor_data = load_json(acceptor_file)
     
-    # Load requester's friend data
     requester_file = os.path.join(FRIENDS_DIR, f"{requester}.json")
     requester_data = load_json(requester_file)
     
-    # Validate request exists in acceptor's incoming
-    if requester not in acceptor_data.get("incoming_requests", []):
+    incoming_lower = [f.lower() for f in acceptor_data.get("incoming_requests", [])]
+    if requester.lower() not in incoming_lower:
         return jsonify({"message": "No friend request from this user"}), 404
     
-    # Remove from incoming requests
-    acceptor_data["incoming_requests"].remove(requester)
+    requester_original = None
+    for req in acceptor_data.get("incoming_requests", []):
+        if req.lower() == requester.lower():
+            requester_original = req
+            break
     
-    # Remove from requester's outgoing requests
-    if requester in requester_data.get("outgoing_requests", []):
-        requester_data["outgoing_requests"].remove(requester)
+    if not requester_original:
+        return jsonify({"message": "No friend request from this user"}), 404
     
-    # Add to both friends lists
-    acceptor_data.setdefault("friends", []).append(requester)
-    requester_data.setdefault("friends", []).append(acceptor)
+    acceptor_data["incoming_requests"].remove(requester_original)
     
-    # Save updated data
+    outgoing = requester_data.get("outgoing_requests", [])
+    outgoing_cleaned = [r for r in outgoing if r.lower() != username.lower()]
+    requester_data["outgoing_requests"] = outgoing_cleaned
+    
+    acceptor_data.setdefault("friends", []).append(requester_original)
+    requester_data.setdefault("friends", []).append(username)
+    
     save_json(acceptor_file, acceptor_data)
     save_json(requester_file, requester_data)
     
     return jsonify({"message": "Friend request accepted"}), 200
 
-# Reject a friend request
 @app.route("/friend_request_reject", methods=["POST"])
-def reject_friend_request():
+@require_auth
+def reject_friend_request(username):
     """Reject incoming friend request"""
-    # Get JSON data from request body
     data = request.get_json()
-    
-    # Validate request body exists
     if not data:
         return jsonify({"message": "Request body required"}), 400
     
-    # Extract token from request
-    token = data.get("temp_token")
-    
-    # Validate token exists
-    if not token:
-        return jsonify({"message": "Token required"}), 401
-    
-    # Get username from token (the rejector)
-    rejector = get_user_from_token(token)
-    
-    # Validate token is valid
-    if not rejector:
-        return jsonify({"message": "Invalid token"}), 401
-    
-    # Get requester username from request
     requester = data.get("requester", "").strip()
-    
-    # Validate requester username exists
     if not requester:
         return jsonify({"message": "Requester username required"}), 400
     
-    # Load rejector's friend data
-    rejector_file = os.path.join(FRIENDS_DIR, f"{rejector}.json")
+    rejector_file = os.path.join(FRIENDS_DIR, f"{username}.json")
     rejector_data = load_json(rejector_file)
     
-    # Load requester's friend data
     requester_file = os.path.join(FRIENDS_DIR, f"{requester}.json")
     requester_data = load_json(requester_file)
     
-    # Validate request exists in rejector's incoming
-    if requester not in rejector_data.get("incoming_requests", []):
+    incoming_lower = [f.lower() for f in rejector_data.get("incoming_requests", [])]
+    if requester.lower() not in incoming_lower:
         return jsonify({"message": "No friend request from this user"}), 404
     
-    # Remove from incoming requests
-    rejector_data["incoming_requests"].remove(requester)
+    requester_original = None
+    for req in rejector_data.get("incoming_requests", []):
+        if req.lower() == requester.lower():
+            requester_original = req
+            break
     
-    # Remove from requester's outgoing requests
-    if requester in requester_data.get("outgoing_requests", []):
-        requester_data["outgoing_requests"].remove(requester)
+    if not requester_original:
+        return jsonify({"message": "No friend request from this user"}), 404
     
-    # Save updated data
+    rejector_data["incoming_requests"].remove(requester_original)
+    
+    outgoing = requester_data.get("outgoing_requests", [])
+    outgoing_cleaned = [r for r in outgoing if r.lower() != username.lower()]
+    requester_data["outgoing_requests"] = outgoing_cleaned
+    
     save_json(rejector_file, rejector_data)
     save_json(requester_file, requester_data)
     
     return jsonify({"message": "Friend request rejected"}), 200
 
-# ========== ROOM/GROUP ROUTES ==========
-
-# Get list of groups user belongs to
+# ========== GROUP MANAGEMENT ROUTES =========
 @app.route("/rooms", methods=["GET"])
-def get_rooms():
-    token = request.args.get("token")
-
-    if not token:
-        return jsonify({"message": "Token required"}), 401
-
-    username = get_user_from_token(token)
-
-    if not username:
-        return jsonify({"message": "Invalid token"}), 401
-
+@require_auth
+def get_rooms(username):
+    """Get all groups user is member of"""
     membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
     memberships = load_json(membership_file)
-
+    
     group_ids = memberships.get("groups", [])
     groups_list = []
-
+    
     for group_id in group_ids:
         group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
         group_data = load_json(group_file)
+        
         group_name = group_data.get("group_name", group_id)
-        groups_list.append(group_name)
-
+        role = get_user_role_in_group(username, group_id)
+        
+        groups_list.append({
+            "group_id": group_id,
+            "group_name": group_name,
+            "role": role,
+            "creator": group_data.get("creator"),
+            "created_at": group_data.get("created_at")
+        })
+    
     return jsonify({"groups": groups_list}), 200
-# ========== MESSAGE ROUTES ==========
 
-# Get messages for a specific group
+# ========== MESSAGE ROUTES =========
 @app.route("/messages", methods=["GET"])
-def get_messages():
-    token = request.args.get("token")
-
-    if not token:
-        return jsonify({"message": "Token required"}), 401
-
-    username = get_user_from_token(token)
-
-    if not username:
-        return jsonify({"message": "Invalid token"}), 401
-
+@require_auth
+def get_messages(username):
+    """Get encrypted messages from group"""
     group_name = request.args.get("group")
-
+    
     if not group_name:
         return jsonify({"message": "Group parameter required"}), 400
-
+    
     group_id = find_group_id_by_name(group_name)
-
+    
     if not group_id:
         return jsonify({"message": "Group not found"}), 404
-
+    
     if not check_membership(username, group_id):
         return jsonify({"message": "Access denied"}), 403
-
+    
     messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
     messages_data = load_json(messages_file)
+    
     messages = messages_data.get("messages", [])
-
+    
     return jsonify({"messages": messages}), 200
 
-# Send encrypted message to group
 @app.route("/messages", methods=["POST"])
-def send_message():
-   
+@require_auth
+def send_message(username):
     """Store encrypted message in group"""
-    # Get JSON data from request body
     data = request.get_json()
     
-    # Validate request body exists
     if not data:
-        # Return error if no data provided
         return jsonify({"message": "Request body required"}), 400
     
-    # Extract temp_token from request data
-    token = data.get("temp_token")
-    
-    # Validate token was provided
-    if not token:
-        # Return error if token missing
-        return jsonify({"message": "Token required"}), 401
-    
-    # Get username from token
-    username = get_user_from_token(token)
-    
-    # Validate token is valid
-    if not username:
-        # Return error if token invalid or expired
-        return jsonify({"message": "Invalid token"}), 401
-    
-    # Get group name from request data
     group = data.get("group")
     
-    # Validate group was specified
     if not group:
-        # Return error if group not specified
         return jsonify({"message": "Group required"}), 400
     
-    # Get ciphertext (encrypted message) from request data
     ciphertext = data.get("ciphertext")
     
-    # Validate message was provided
     if not ciphertext:
-        # Return error if message empty
         return jsonify({"message": "Message cannot be empty"}), 400
     
-    # Find group ID by searching for matching name
     group_id = find_group_id_by_name(group)
-
-    print("USERNAME:", username)
-    print("GROUP NAME:", group)
-    print("GROUP ID:", group_id)
-    # Validate group was found
+    
     if not group_id:
-        # Return error if group doesn't exist
         return jsonify({"message": "Group not found"}), 404
     
-    # Check if user is member of group
     if not check_membership(username, group_id):
-        # Return error if user not authorized
         return jsonify({"message": "Access denied"}), 403
     
-    # Build path to group's messages file
     messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
     
-    # Load existing messages for group
     messages_data = load_json(messages_file)
     
-    # Initialize messages array if empty
     if "messages" not in messages_data:
         messages_data["messages"] = []
     
-    # Create new message object
+    nonce = data.get("nonce")
+    signature = data.get("signature")
+    
     message = {
-        # Store sender's username
         "sender": username,
-        # Store ciphertext (NEVER decrypt on server)
         "text": ciphertext,
-        # Store message timestamp in ISO format
+        "ciphertext": ciphertext,
         "timestamp": datetime.now().isoformat()
     }
     
-    # Add message to messages list
+    if nonce:
+        message["nonce"] = nonce
+    
+    if signature:
+        message["signature"] = signature
+    
     messages_data["messages"].append(message)
     
-    # Save updated messages to storage
     save_json(messages_file, messages_data)
     
-    # Return success response
     return jsonify({"message": "Message sent"}), 201
 
-
-# ========== GROUP MANAGEMENT ROUTES ==========
-
-# Create new group
 @app.route("/group_add", methods=["POST"])
-def add_group():
-    """Create new group with only friends as members"""
-    # Get JSON data from request body
+@require_auth
+def add_group(username):
+    """Create new group with selected friends"""
     data = request.get_json()
-
-    # Validate request body exists
+    
     if not data:
         return jsonify({"message": "Request body required"}), 400
-
-    # Extract token from request
-    token = data.get("temp_token")
-
-    # Validate token exists
-    if not token:
-        return jsonify({"message": "Token required"}), 401
-
-    # Get username from token
-    username = get_user_from_token(token)
-
-    # Validate token is valid
-    if not username:
-        return jsonify({"message": "Invalid token"}), 401
-
-    # Get group name from request
-    groupname = data.get("groupname", "").strip()
     
-    # Get member list from request
+    group_name = data.get("groupname", "").strip()
     members = data.get("members", [])
-
-    # Validate group name was provided
-    if not groupname:
+    encrypted_group_keys = data.get("encrypted_group_keys", [])
+    
+    if not group_name:
         return jsonify({"message": "Group name required"}), 400
-
-    # Generate unique group ID
+    
     group_id = str(uuid4())
-
-    # Create group data structure
+    
     group_data = {
         "group_id": group_id,
-        "group_name": groupname,
+        "group_name": group_name,
         "creator": username,
         "created_at": datetime.now().isoformat()
     }
-
-    # Save group to storage
+    
     group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
     save_json(group_file, group_data)
-
-    # Add creator to group
+    
     membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
     memberships = load_json(membership_file)
-
+    
     if "groups" not in memberships:
         memberships["groups"] = []
-
+    
     if group_id not in memberships["groups"]:
         memberships["groups"].append(group_id)
-
+    
     save_json(membership_file, memberships)
-
-    # Add validated members (MUST BE FRIENDS)
+    
+    set_user_role_in_group(username, group_id, "admin")
+    
     users = load_users()
-
+    
     for member in members:
-        # Skip empty member names
         if not member:
             continue
-
-        # Trim whitespace
+        
         member = member.strip()
-
-        # Skip if member is creator
+        
         if member.lower() == username.lower():
             continue
-
-        # Skip if member doesn't exist
-        if member.lower() not in [u.lower() for u in users]:
+        
+        member_key = None
+        for key in users.keys():
+            if key.lower() == member.lower():
+                member_key = key
+                break
+        
+        if not member_key:
             continue
-
-        # VALIDATE: Member must be in creator's friends list
-        if not are_friends(username, member):
-            # Skip members that aren't friends (don't fail, just skip)
+        
+        if not are_friends(username, member_key):
             continue
-
-        # Add member to group
-        member_file = os.path.join(MEMBERSHIPS_DIR, f"{member}.json")
+        
+        member_file = os.path.join(MEMBERSHIPS_DIR, f"{member_key}.json")
         member_data = load_json(member_file)
-
+        
         if "groups" not in member_data:
             member_data["groups"] = []
-
+        
         if group_id not in member_data["groups"]:
             member_data["groups"].append(group_id)
-
+        
         save_json(member_file, member_data)
+        
+        set_user_role_in_group(member_key, group_id, "member")
 
-    # Create empty messages file for group
+    for encrypted_item in encrypted_group_keys:
+        target_username = encrypted_item.get("username")
+        encrypted_key = encrypted_item.get("encrypted_group_key")
+        if not target_username or not encrypted_key:
+            continue
+        save_group_key(group_id, target_username, encrypted_key)
+    
     messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
     save_json(messages_file, {"messages": []})
-
-    # Return success response
+    
     return jsonify({
         "message": "Group created",
         "group_id": group_id
     }), 201
 
-
 @app.route("/group_delete", methods=["POST"])
-def delete_group():
+@require_auth
+def delete_group(username):
+    """Delete group (admin only)"""
     data = request.get_json()
-
+    
     if not data:
         return jsonify({"message": "Request body required"}), 400
-
-    token = data.get("temp_token")
+    
     group_name = data.get("group")
-
-    if not token or not group_name:
-        return jsonify({"message": "Token and group required"}), 400
-
-    username = get_user_from_token(token)
-
-    if not username:
-        return jsonify({"message": "Invalid token"}), 401
-
-    # Find group ID
+    
+    if not group_name:
+        return jsonify({"message": "Group required"}), 400
+    
     group_id = find_group_id_by_name(group_name)
-
+    
     if not group_id:
         return jsonify({"message": "Group not found"}), 404
-
-    # Load group data
+    
     group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
     group_data = load_json(group_file)
-
-    # OPTIONAL: only creator can delete
+    
     if group_data.get("creator") != username:
         return jsonify({"message": "Only creator can delete group"}), 403
-
-    #  DELETE GROUP FILE
+    
     if os.path.exists(group_file):
         os.remove(group_file)
-
-    #  DELETE MESSAGE FILE
+    
     messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
     if os.path.exists(messages_file):
         os.remove(messages_file)
-
-    #  REMOVE FROM ALL USERS
+    
+    roles_file = os.path.join(ROLES_DIR, f"{group_id}.json")
+    if os.path.exists(roles_file):
+        os.remove(roles_file)
+    
     users = load_users()
-
-    for user in users:
+    
+    for user in users.keys():
         membership_file = os.path.join(MEMBERSHIPS_DIR, f"{user}.json")
         membership_data = load_json(membership_file)
-
+        
         if "groups" in membership_data and group_id in membership_data["groups"]:
             membership_data["groups"].remove(group_id)
             save_json(membership_file, membership_data)
-
+    
     return jsonify({"message": "Group deleted"}), 200
 
-# Leave a group
 @app.route("/group_leave", methods=["POST"])
-def leave_group():
-    """Remove user from a group. If admin leaves, transfer admin or delete group."""
+@require_auth
+def leave_group(username):
+    """Leave a group"""
     data = request.get_json()
+    
     if not data:
         return jsonify({"message": "Request body required"}), 400
-    token = data.get("temp_token")
+    
     group_name = data.get("group")
-    if not token or not group_name:
-        return jsonify({"message": "Token and group required"}), 400
-    username = get_user_from_token(token)
-    if not username:
-        return jsonify({"message": "Invalid token"}), 401
+    
+    if not group_name:
+        return jsonify({"message": "Group required"}), 400
+    
     group_id = find_group_id_by_name(group_name)
+    
     if not group_id:
         return jsonify({"message": "Group not found"}), 404
+    
     if not check_membership(username, group_id):
         return jsonify({"message": "Not a member of this group"}), 403
-
-    # Load group data
+    
     group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
     group_data = load_json(group_file)
-
-    # Remove group from user's membership
+    
     membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
     membership_data = load_json(membership_file)
+    
     if group_id in membership_data.get("groups", []):
         membership_data["groups"].remove(group_id)
         save_json(membership_file, membership_data)
-
-    # Get all current members of the group
+    
     all_users = load_users()
     members = []
-    for user in all_users:
+    
+    for user in all_users.keys():
         m_file = os.path.join(MEMBERSHIPS_DIR, f"{user}.json")
         m_data = load_json(m_file)
+        
         if group_id in m_data.get("groups", []):
             members.append(user)
-
-    # If leaving user is admin/creator
+    
     if group_data.get("creator") == username:
         if members:
-            # Transfer admin to next member (alphabetical)
             new_admin = sorted(members)[0]
             group_data["creator"] = new_admin
             save_json(group_file, group_data)
+            set_user_role_in_group(new_admin, group_id, "admin")
             return jsonify({"message": f"Left group. Admin transferred to {new_admin}"}), 200
         else:
-            # No members left, delete group and messages
             if os.path.exists(group_file):
                 os.remove(group_file)
             messages_file = os.path.join(MESSAGES_DIR, f"{group_id}.json")
             if os.path.exists(messages_file):
                 os.remove(messages_file)
+            roles_file = os.path.join(ROLES_DIR, f"{group_id}.json")
+            if os.path.exists(roles_file):
+                os.remove(roles_file)
             return jsonify({"message": "Left group. Group deleted (no members left)"}), 200
-
+    
     return jsonify({"message": "Left group successfully"}), 200
 
 # ========== ERROR HANDLERS ==========
-
-# Handle 404 not found errors
 @app.errorhandler(404)
 def not_found(error):
     """Handle requests to undefined endpoints"""
-    # Return JSON error response
     return jsonify({"message": "Endpoint not found"}), 404
 
-# Handle 500 internal server errors
 @app.errorhandler(500)
 def internal_error(error):
     """Handle unexpected server errors"""
-    # Return JSON error response
+    print(f"Internal server error: {str(error)}")
     return jsonify({"message": "Internal server error"}), 500
 
 # ========== APPLICATION ENTRY POINT ==========
-
-# Run Flask application if file is executed directly
 if __name__ == "__main__":
-    # Run Flask development server on localhost port 5000
-    app.run(debug=True, host="localhost", port=5000)
+    app.run(
+        debug=os.environ.get('FLASK_DEBUG', False),
+        host="localhost",
+        port=5000
+    )

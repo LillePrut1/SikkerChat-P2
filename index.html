@@ -397,8 +397,18 @@
     </div>
 
     <!-- ===== SCRIPTS ===== -->
-    <!-- Link to external JavaScript file for application logic -->
+    <!-- Security and cryptography modules (MUST load before app.js) -->
+    <script src="crypto.js"></script>
+    <!-- WebCrypto API wrapper for end-to-end encryption (RSA-OAEP + AES-GCM) -->
+    
+    <script src="indexeddb.js"></script>
+    <!-- IndexedDB manager for secure key storage -->
+    
+    <script src="sanitize.js"></script>
+    <!-- Input sanitization and XSS protection module -->
+    
+    <!-- Main application logic (depends on security modules) -->
     <script src="app.js"></script>
-    <!-- JavaScript file containing all interactive functionality and backend communication -->
+    <!-- Main application: handles UI, authentication, messaging, and groups -->
   </body>
 </html>

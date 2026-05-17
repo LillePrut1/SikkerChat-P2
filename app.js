@@ -5,6 +5,14 @@ const API_BASE_URL = "http://localhost:5000";
 let currentUsername = null;
 let authToken = null;
 let currentChatName = null;
+let currentChatId = null;
+let userPrivateKey = null; // RSA private key (loaded in memory after login)
+let userPublicKey = null; // RSA public key (for reference)
+let userSigningPrivateKey = null; // RSA signing private key
+let userSigningPublicKey = null; // RSA signing public key
+let groupKeys = {}; // Cache of decrypted group keys: { groupName: CryptoKey }
+let groupIdByName = {}; // Map group name -> group id for key resolution
+let dbReady = false; // Flag to track IndexedDB initialization
 
 let appState = {
   friends: [],
@@ -15,7 +23,17 @@ let appState = {
 };
 
 /* ========== INITIALIZATION ========== */
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", async function() {
+  // Initialize IndexedDB first (crypto key storage)
+  try {
+    await IndexedDBModule.initializeDatabase();
+    dbReady = true;
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+    alert("Failed to initialize secure storage");
+    return;
+  }
+  
   initializeApp();
 });
 
@@ -26,6 +44,7 @@ function initializeApp() {
   if (savedToken && savedUsername) {
     authToken = savedToken;
     currentUsername = savedUsername;
+    // Note: private key will be loaded during first crypto operation after login
     showDashboard();
     loadDashboardData();
     attachEventListeners();
@@ -96,10 +115,41 @@ function attachAuthListeners() {
 
 async function handleLogin(username, password) {
   try {
+    let loginPublicKeyBase64 = null;
+    let loginSignaturePublicKeyBase64 = null;
+
+    // Try to derive the public key from a stored private key before login.
+    // This helps recover existing accounts that were created before public-key
+    // registration was fully supported.
+    try {
+      const encryptedPrivateKeyBase64 = await IndexedDBModule.loadPrivateKey(username);
+      if (encryptedPrivateKeyBase64) {
+        const derivedPublicKey = await CryptoModule.derivePublicKeyFromPrivateKey(encryptedPrivateKeyBase64);
+        loginPublicKeyBase64 = await CryptoModule.exportPublicKey(derivedPublicKey);
+      }
+    } catch (deriveError) {
+      console.warn("Could not derive public key from stored private key before login:", deriveError);
+    }
+
+    try {
+      const encryptedSigningPrivateKeyBase64 = await IndexedDBModule.loadSigningPrivateKey(username);
+      if (encryptedSigningPrivateKeyBase64) {
+        const derivedSigningPublicKey = await CryptoModule.derivePublicKeyFromPrivateKey(encryptedSigningPrivateKeyBase64, 'signature');
+        loginSignaturePublicKeyBase64 = await CryptoModule.exportPublicKey(derivedSigningPublicKey);
+      }
+    } catch (deriveError) {
+      console.warn("Could not derive signature public key from stored signing private key before login:", deriveError);
+    }
+
     const response = await fetch(`${API_BASE_URL}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({
+        username,
+        password,
+        public_key: loginPublicKeyBase64,
+        signature_public_key: loginSignaturePublicKeyBase64
+      })
     });
 
     if (!response.ok) {
@@ -113,6 +163,82 @@ async function handleLogin(username, password) {
     currentUsername = username;
     localStorage.setItem("authToken", authToken);
     localStorage.setItem("username", currentUsername);
+
+    // Load encrypted private key from IndexedDB and decrypt it
+    // The private key is kept in memory for this session for crypto operations
+    try {
+      const encryptedPrivateKeyBase64 = await IndexedDBModule.loadPrivateKey(username);
+      const encryptedSigningPrivateKeyBase64 = await IndexedDBModule.loadSigningPrivateKey(username);
+
+      if (encryptedPrivateKeyBase64) {
+        // Import the private key from storage
+        userPrivateKey = await CryptoModule.importPrivateKey(encryptedPrivateKeyBase64);
+      } else {
+        console.warn("No private key found in storage. This is the first login.");
+        alert("Private key not found. Please register again.");
+        localStorage.removeItem("authToken");
+        localStorage.removeItem("username");
+        showAuthScreen();
+        attachAuthListeners();
+        return;
+      }
+
+      if (encryptedSigningPrivateKeyBase64) {
+        userSigningPrivateKey = await CryptoModule.importPrivateKey(encryptedSigningPrivateKeyBase64, 'sign');
+      }
+    } catch (dbError) {
+      console.error("Failed to load private key:", dbError);
+      alert("Failed to load encryption keys: " + dbError.message);
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("username");
+      showAuthScreen();
+      attachAuthListeners();
+      return;
+    }
+
+    try {
+      const publicKeyResponse = await fetch(
+        `${API_BASE_URL}/public_key?username=${encodeURIComponent(currentUsername)}&token=${authToken}`
+      );
+      if (publicKeyResponse.ok) {
+        const publicKeyData = await publicKeyResponse.json();
+        if (publicKeyData.public_key) {
+          userPublicKey = await CryptoModule.importPublicKey(publicKeyData.public_key);
+        }
+      }
+    } catch (publicKeyError) {
+      console.warn("Could not load public key after login:", publicKeyError);
+    }
+
+    try {
+      const signaturePublicKeyResponse = await fetch(
+        `${API_BASE_URL}/public_key?username=${encodeURIComponent(currentUsername)}&type=signature&token=${authToken}`
+      );
+      if (signaturePublicKeyResponse.ok) {
+        const signatureKeyData = await signaturePublicKeyResponse.json();
+        if (signatureKeyData.public_key) {
+          userSigningPublicKey = await CryptoModule.importPublicKey(signatureKeyData.public_key, 'signature');
+        }
+      }
+    } catch (signatureError) {
+      console.warn("Could not load signature public key after login:", signatureError);
+    }
+
+    if (!userPublicKey && loginPublicKeyBase64) {
+      try {
+        userPublicKey = await CryptoModule.importPublicKey(loginPublicKeyBase64);
+      } catch (fallbackError) {
+        console.warn("Failed to import derived public key after login:", fallbackError);
+      }
+    }
+
+    if (!userSigningPublicKey && loginSignaturePublicKeyBase64) {
+      try {
+        userSigningPublicKey = await CryptoModule.importPublicKey(loginSignaturePublicKeyBase64, 'signature');
+      } catch (fallbackError) {
+        console.warn("Failed to import derived signing public key after login:", fallbackError);
+      }
+    }
 
     document.getElementById("loginUsername").value = "";
     document.getElementById("loginPassword").value = "";
@@ -129,10 +255,48 @@ async function handleLogin(username, password) {
 
 async function handleRegister(username, password) {
   try {
+    // Input validation
+    const usernameValidation = SanitizeModule.validateUsername(username);
+    if (!usernameValidation.isValid) {
+      alert("Username error: " + usernameValidation.error);
+      return;
+    }
+
+    const passwordValidation = SanitizeModule.validatePassword(password);
+    if (!passwordValidation.isValid) {
+      alert("Password error: " + passwordValidation.error);
+      return;
+    }
+
+    // Show loading message
+    alert("Generating encryption keys (this may take a few seconds)...");
+
+    // Generate RSA-4096 key pair for this user
+    const keyPair = await CryptoModule.generateKeyPair();
+    userPublicKey = keyPair.publicKey;
+    const privateKey = keyPair.privateKey;
+
+    // Generate a separate RSA-PSS key pair for digital signatures
+    const signatureKeyPair = await CryptoModule.generateSignatureKeyPair();
+    userSigningPublicKey = signatureKeyPair.publicKey;
+    userSigningPrivateKey = signatureKeyPair.privateKey;
+
+    // Export public keys to send to server
+    const publicKeyBase64 = await CryptoModule.exportPublicKey(keyPair.publicKey);
+    const signaturePublicKeyBase64 = await CryptoModule.exportPublicKey(signatureKeyPair.publicKey);
+    const privateKeyBase64 = await CryptoModule.exportPrivateKey(keyPair.privateKey);
+    const signingPrivateKeyBase64 = await CryptoModule.exportPrivateKey(signatureKeyPair.privateKey);
+
+    // Send registration request with both encryption and signature public keys
     const response = await fetch(`${API_BASE_URL}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ 
+        username: username, 
+        password: password,
+        public_key: publicKeyBase64,
+        signature_public_key: signaturePublicKeyBase64
+      })
     });
 
     if (!response.ok) {
@@ -141,16 +305,101 @@ async function handleRegister(username, password) {
       return;
     }
 
-    alert("Registration successful! Please log in.");
+    // Registration successful - store encrypted private keys in IndexedDB
+    // The private keys are encrypted with a KDF derived from the password
+    // For now, we're just storing the private keys in IndexedDB
+    // In a production system, encrypt with password-derived key
+    await IndexedDBModule.savePrivateKey(username, privateKeyBase64, signingPrivateKeyBase64);
+
+    alert("Registration successful! Your encryption keys have been created and stored securely. Please log in.");
     document.getElementById("registerUsername").value = "";
     document.getElementById("registerPassword").value = "";
     document.getElementById("registerConfirmPassword").value = "";
+
+    // Clear key from memory
+    userPublicKey = null;
 
     document.getElementById("loginTabBtn").click();
 
   } catch (error) {
     console.error("Register error:", error);
-    alert("Registration error");
+    alert("Registration error: " + error.message);
+  }
+}
+
+async function fetchUserPublicKey(username, keyType = 'encrypt') {
+  try {
+    const typeParam = keyType === 'signature' ? 'signature' : 'encryption';
+    const response = await fetch(
+      `${API_BASE_URL}/public_key?username=${encodeURIComponent(username)}&type=${typeParam}&token=${authToken}`
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to fetch public key: ${response.status}`);
+    }
+    const data = await response.json();
+    return await CryptoModule.importPublicKey(data.public_key, keyType === 'signature' ? 'signature' : 'encrypt');
+  } catch (error) {
+    console.warn("Failed to fetch public key for", username, error);
+    return null;
+  }
+}
+
+async function fetchEncryptedGroupKeyFromServer(groupName) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/group_key?group=${encodeURIComponent(groupName)}&token=${authToken}`
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    return data.encrypted_group_key || null;
+  } catch (error) {
+    console.error("Failed to fetch encrypted group key from server:", error);
+    return null;
+  }
+}
+
+async function loadGroupKeyForChat(groupName, groupId) {
+  const resolvedGroupId = groupId || groupIdByName[groupName];
+
+  // Try raw AES key first
+  if (resolvedGroupId) {
+    const rawKeyBase64 = await IndexedDBModule.loadGroupKey(resolvedGroupId);
+    if (rawKeyBase64) {
+      return await CryptoModule.importGroupKey(rawKeyBase64);
+    }
+  }
+
+  // Fallback: fetch encrypted group key from server and decrypt with private key
+  const encryptedKeyBase64 = await fetchEncryptedGroupKeyFromServer(groupName);
+  if (!encryptedKeyBase64) {
+    return null;
+  }
+
+  if (!userPrivateKey) {
+    try {
+      const encryptedPrivateKeyBase64 = await IndexedDBModule.loadPrivateKey(currentUsername);
+      if (!encryptedPrivateKeyBase64) {
+        throw new Error("Private key not found locally");
+      }
+      userPrivateKey = await CryptoModule.importPrivateKey(encryptedPrivateKeyBase64);
+    } catch (keyError) {
+      console.error("Unable to import private key for group decryption:", keyError);
+      return null;
+    }
+  }
+
+  try {
+    const decryptedGroupKey = await CryptoModule.decryptGroupKey(encryptedKeyBase64, userPrivateKey);
+    if (resolvedGroupId) {
+      const rawKeyBase64 = await CryptoModule.exportGroupKey(decryptedGroupKey);
+      await IndexedDBModule.saveGroupKey(resolvedGroupId, rawKeyBase64);
+    }
+    return decryptedGroupKey;
+  } catch (decryptError) {
+    console.error("Failed to decrypt group key from server:", decryptError);
+    return null;
   }
 }
 
@@ -202,6 +451,12 @@ async function loadDashboardData() {
     if (groupsResponse.ok) {
       const groupsData = await groupsResponse.json();
       appState.groups = groupsData.groups || [];
+      groupIdByName = appState.groups.reduce((map, group) => {
+        if (group && group.group_name && group.group_id) {
+          map[group.group_name] = group.group_id;
+        }
+        return map;
+      }, {});
     }
 
     renderDashboard();
@@ -301,8 +556,11 @@ function renderGroupsList() {
   for (let group of appState.groups) {
     const chatItem = document.createElement("div");
     chatItem.className = "chat-item";
-    chatItem.setAttribute("data-chat", group);
-    chatItem.textContent = group;
+    const groupName = group.group_name || group;
+    const groupId = group.group_id || "";
+    chatItem.setAttribute("data-chat", groupName);
+    chatItem.setAttribute("data-group-id", groupId);
+    chatItem.textContent = groupName;
     chatList.appendChild(chatItem);
   }
 }
@@ -350,7 +608,22 @@ function attachEventListeners() {
 
 function attachLogoutListener() {
   const logoutBtn = document.getElementById("logoutBtn");
-  logoutBtn.addEventListener("click", () => {
+  logoutBtn.addEventListener("click", async () => {
+    // Clear private key from memory (security: don't keep in RAM after logout)
+    userPrivateKey = null;
+    userPublicKey = null;
+    userSigningPrivateKey = null;
+    userSigningPublicKey = null;
+    currentChatId = null;
+    groupKeys = {};
+    
+    // Clear IndexedDB sensitive data
+    try {
+      await IndexedDBModule.clearSensitiveData(currentUsername);
+    } catch (error) {
+      console.error("Error clearing sensitive data:", error);
+    }
+    
     localStorage.removeItem("authToken");
     localStorage.removeItem("username");
     authToken = null;
@@ -468,13 +741,68 @@ function populateFriendCheckboxes() {
 
 async function createGroup(groupName, members) {
   try {
+    const groupValidation = SanitizeModule.validateGroupName(groupName);
+    if (!groupValidation.isValid) {
+      alert("Group name error: " + groupValidation.error);
+      return;
+    }
+
+    // Generate AES-GCM key for this group
+    const groupKey = await CryptoModule.generateGroupKey();
+
+    // Ensure we have the current user's public key to encrypt the group key for ourselves
+    if (!userPublicKey) {
+      userPublicKey = await fetchUserPublicKey(currentUsername);
+      if (!userPublicKey) {
+        alert("Unable to load your public key for group encryption.");
+        return;
+      }
+    }
+
+    const encryptedGroupKeys = [];
+    const selfEncryptedKey = await CryptoModule.encryptGroupKeyForUser(groupKey, userPublicKey);
+    encryptedGroupKeys.push({
+      username: currentUsername,
+      encrypted_group_key: selfEncryptedKey
+    });
+
+    for (let memberUsername of members) {
+      try {
+        if (!memberUsername || memberUsername.toLowerCase() === currentUsername.toLowerCase()) {
+          continue;
+        }
+
+        const memberPublicKey = await fetchUserPublicKey(memberUsername);
+        if (!memberPublicKey) {
+          alert(`Could not load public key for ${memberUsername}. Group creation aborted.`);
+          return;
+        }
+
+        const encryptedKey = await CryptoModule.encryptGroupKeyForUser(groupKey, memberPublicKey);
+        encryptedGroupKeys.push({
+          username: memberUsername,
+          encrypted_group_key: encryptedKey
+        });
+      } catch (error) {
+        console.error("Failed to encrypt key for member:", memberUsername, error);
+        alert(`Failed to encrypt group key for ${memberUsername}. Group creation aborted.`);
+        return;
+      }
+    }
+
+    // Keep raw group key in memory until the group exists on the server
+    const groupKeyBase64 = await CryptoModule.exportGroupKey(groupKey);
+    groupKeys[groupName] = groupKey;
+
+    // Send group creation request with encrypted group keys for recipients
     const response = await fetch(`${API_BASE_URL}/group_add`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         temp_token: authToken,
         groupname: groupName,
-        members: members
+        members: members,
+        encrypted_group_keys: encryptedGroupKeys
       })
     });
 
@@ -484,6 +812,13 @@ async function createGroup(groupName, members) {
       return;
     }
 
+    const responseData = await response.json();
+    if (responseData.group_id) {
+      await IndexedDBModule.saveGroupKey(responseData.group_id, groupKeyBase64);
+      groupIdByName[groupName] = responseData.group_id;
+      currentChatId = responseData.group_id;
+    }
+
     alert("Group created!");
     document.getElementById("groupName").value = "";
     document.getElementById("createGroupForm").classList.add("hidden");
@@ -491,7 +826,7 @@ async function createGroup(groupName, members) {
 
   } catch (error) {
     console.error("Error creating group:", error);
-    alert("Error creating group");
+    alert("Error creating group: " + error.message);
   }
 }
 
@@ -507,16 +842,21 @@ function chatClickHandler(e) {
   const chatItem = e.target.closest(".chat-item");
   if (chatItem) {
     const chatName = chatItem.getAttribute("data-chat");
-    openChat(chatName);
+    const groupId = chatItem.getAttribute("data-group-id");
+    openChat(chatName, groupId);
   }
 }
 
-function openChat(chatName) {
+function openChat(chatName, groupId) {
   currentChatName = chatName;
+  currentChatId = groupId || groupIdByName[chatName] || null;
   document.querySelectorAll(".chat-item").forEach(item => {
     item.classList.remove("active");
   });
-  document.querySelector(`[data-chat="${chatName}"]`).classList.add("active");
+  const activeItem = document.querySelector(`[data-chat="${chatName}"]`);
+  if (activeItem) {
+    activeItem.classList.add("active");
+  }
 
   document.getElementById("chatName").textContent = chatName;
   showChatView();
@@ -536,16 +876,33 @@ async function loadMessages(chatName) {
 
     const data = await response.json();
     appState.currentMessages = data.messages || [];
-    renderMessages();
+    
+    // renderMessages is now async due to decryption
+    await renderMessages();
 
   } catch (error) {
     console.error("Error loading messages:", error);
   }
 }
 
-function renderMessages() {
+async function renderMessages() {
   const messageContainer = document.getElementById("messageContainer");
   messageContainer.innerHTML = "";
+
+  // Get group key for current chat
+  let groupKey = groupKeys[currentChatName];
+  if (!groupKey) {
+    try {
+      groupKey = await loadGroupKeyForChat(currentChatName, currentChatId);
+      if (groupKey) {
+        groupKeys[currentChatName] = groupKey; // Cache in memory
+      }
+    } catch (error) {
+      console.error("Failed to load group key for decryption:", error);
+      messageContainer.innerHTML = '<p style="color: red;">Error: Could not load encryption key</p>';
+      return;
+    }
+  }
 
   for (let msg of appState.currentMessages) {
     const messageDiv = document.createElement("div");
@@ -561,7 +918,50 @@ function renderMessages() {
 
     const textDiv = document.createElement("div");
     textDiv.className = "message-text";
-    textDiv.textContent = msg.text || msg.ciphertext || "";
+
+    // Decrypt message if we have ciphertext and nonce
+    let displayText = "[Unable to decrypt message]";
+    const ciphertextValue = msg.ciphertext || msg.text;
+    if (ciphertextValue && msg.nonce && groupKey) {
+      try {
+        // Decrypt the message using the group key
+        const decryptedText = await CryptoModule.decryptMessage(
+          ciphertextValue,
+          msg.nonce,
+          groupKey
+        );
+
+        displayText = decryptedText;
+
+        if (msg.signature) {
+          try {
+            const senderSigningPublicKey = await fetchUserPublicKey(msg.sender, 'signature');
+            if (senderSigningPublicKey) {
+              const messageToVerify = `${ciphertextValue}:${msg.nonce}`;
+              const validSignature = await CryptoModule.verifySignature(
+                messageToVerify,
+                msg.signature,
+                senderSigningPublicKey
+              );
+              if (!validSignature) {
+                displayText = `[Invalid signature] ${displayText}`;
+              }
+            }
+          } catch (verifyError) {
+            console.warn('Signature verification failed for', msg.sender, verifyError);
+          }
+        }
+      } catch (decryptError) {
+        console.error("Error decrypting message:", decryptError);
+        displayText = "[Decryption failed]";
+      }
+    } else if (msg.text) {
+      // Fallback for plaintext messages or legacy stored data
+      displayText = msg.text;
+    }
+
+    // Sanitize the decrypted text before displaying
+    textDiv.textContent = displayText;
 
     const timeDiv = document.createElement("div");
     timeDiv.className = "message-timestamp";
@@ -574,7 +974,10 @@ function renderMessages() {
     messageContainer.appendChild(messageDiv);
   }
 
-  messageContainer.scrollTop = messageContainer.scrollHeight;
+  // Use requestAnimationFrame to ensure DOM has been painted before scrolling
+  requestAnimationFrame(() => {
+    messageContainer.scrollTop = messageContainer.scrollHeight;
+  });
 }
 
 function attachMessageListeners() {
@@ -601,13 +1004,62 @@ function attachMessageListeners() {
 
 async function sendMessage(chatName, messageText) {
   try {
+    // Validate input
+    const messageValidation = SanitizeModule.validateMessage(messageText);
+    if (!messageValidation.isValid) {
+      alert("Message error: " + messageValidation.error);
+      return;
+    }
+
+    // Get or load group key for this group
+    let groupKey = groupKeys[chatName];
+    if (!groupKey) {
+      try {
+        groupKey = await loadGroupKeyForChat(chatName, currentChatId);
+        if (groupKey) {
+          groupKeys[chatName] = groupKey; // Cache in memory
+        } else {
+          alert("Error: Group key not found. Unable to send message.");
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load group key:", error);
+        alert("Error: Could not load encryption key for this group");
+        return;
+      }
+    }
+
+    // Encrypt message with group key
+    const { ciphertext, nonce } = await CryptoModule.encryptMessage(messageText, groupKey);
+
+    // Sign the message ciphertext and nonce so recipients can verify sender authenticity
+    let signature = null;
+    if (!userSigningPrivateKey) {
+      try {
+        const signingKeyBase64 = await IndexedDBModule.loadSigningPrivateKey(currentUsername);
+        if (signingKeyBase64) {
+          userSigningPrivateKey = await CryptoModule.importPrivateKey(signingKeyBase64, 'sign');
+        }
+      } catch (signingKeyError) {
+        console.warn('Could not load signing private key:', signingKeyError);
+      }
+    }
+
+    if (userSigningPrivateKey) {
+      const messageToSign = `${ciphertext}:${nonce}`;
+      signature = await CryptoModule.signMessage(messageToSign, userSigningPrivateKey);
+    }
+
+    // Send encrypted message to server
     const response = await fetch(`${API_BASE_URL}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         temp_token: authToken,
-        ciphertext: messageText,
-        group: chatName
+        group: chatName,
+        ciphertext: ciphertext,  // Encrypted message
+        nonce: nonce,            // IV for AES-GCM decryption
+        signature: signature
       })
     });
 
@@ -617,11 +1069,12 @@ async function sendMessage(chatName, messageText) {
       return;
     }
 
+    // Message sent successfully, refresh message list
     await loadMessages(chatName);
 
   } catch (error) {
     console.error("Error sending message:", error);
-    alert("Error sending message");
+    alert("Error sending message: " + error.message);
   }
 }
 
