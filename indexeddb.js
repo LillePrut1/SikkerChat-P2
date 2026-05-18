@@ -92,6 +92,128 @@ const IndexedDBModule = (() => {
     });
   }
 
+  // ========== PASSWORD ENCRYPTION HELPERS ==========
+
+  /**
+   * Derive encryption key from password using PBKDF2
+   * Used to encrypt private keys at rest in IndexedDB
+   * @param {string} password - User password
+   * @param {string} salt - Random salt for key derivation
+   * @returns {Promise<CryptoKey>} Derived encryption key
+   */
+  async function deriveKeyFromPassword(password, salt) {
+    try {
+      // Import password as base key material
+      const baseKey = await window.crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(password),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+      );
+
+      // Derive key from password using PBKDF2
+      // 100,000 iterations provides reasonable security
+      const derivedKey = await window.crypto.subtle.deriveKey(
+        {
+          name: 'PBKDF2',
+          salt: new TextEncoder().encode(salt),
+          iterations: 100000,
+          hash: 'SHA-256'
+        },
+        baseKey,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+
+      return derivedKey;
+    } catch (error) {
+      console.error('Error deriving key from password:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Encrypt private key with password-derived key
+   * Uses AES-GCM for authenticated encryption
+   * @param {string} privateKeyBase64 - Private key to encrypt
+   * @param {string} password - User password
+   * @param {string} username - Username (used as salt)
+   * @returns {Promise<object>} { encryptedData: base64, salt: string, iv: base64 }
+   */
+  async function encryptPrivateKeyWithPassword(privateKeyBase64, password, username) {
+    try {
+      // Use username as part of salt for reproducible key derivation
+      const salt = username;
+
+      // Derive key from password
+      const derivedKey = await deriveKeyFromPassword(password, salt);
+
+      // Generate random IV (12 bytes for GCM)
+      const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+      // Convert private key Base64 to bytes
+      const keyData = new TextEncoder().encode(privateKeyBase64);
+
+      // Encrypt with AES-GCM
+      const encryptedBuffer = await window.crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: iv },
+        derivedKey,
+        keyData
+      );
+
+      // Convert encrypted data and IV to Base64
+      const encryptedBase64 = btoa(String.fromCharCode(...new Uint8Array(encryptedBuffer)));
+      const ivBase64 = btoa(String.fromCharCode(...iv));
+
+      return {
+        encryptedData: encryptedBase64,
+        salt: salt,
+        iv: ivBase64
+      };
+    } catch (error) {
+      console.error('Error encrypting private key:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Decrypt private key with password-derived key
+   * Uses AES-GCM for authenticated decryption
+   * @param {object} encryptedData - { encryptedData, salt, iv }
+   * @param {string} password - User password
+   * @returns {Promise<string>} Decrypted private key (Base64)
+   */
+  async function decryptPrivateKeyWithPassword(encryptedData, password) {
+    try {
+      // Use stored salt for key derivation
+      const { encryptedData: encryptedBase64, salt, iv: ivBase64 } = encryptedData;
+
+      // Derive key from password using stored salt
+      const derivedKey = await deriveKeyFromPassword(password, salt);
+
+      // Convert Base64 back to bytes
+      const encryptedBytes = new Uint8Array(atob(encryptedBase64).split('').map(c => c.charCodeAt(0)));
+      const ivBytes = new Uint8Array(atob(ivBase64).split('').map(c => c.charCodeAt(0)));
+
+      // Decrypt with AES-GCM
+      const decryptedBuffer = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: ivBytes },
+        derivedKey,
+        encryptedBytes
+      );
+
+      // Convert decrypted bytes to UTF-8 string
+      const decryptedBase64 = new TextDecoder().decode(decryptedBuffer);
+
+      return decryptedBase64;
+    } catch (error) {
+      console.error('Error decrypting private key:', error);
+      throw error;
+    }
+  }
+
   // ========== PRIVATE KEY STORAGE ==========
 
   /**
@@ -99,55 +221,64 @@ const IndexedDBModule = (() => {
    * Private key is encrypted with user's password (derived key)
    * Should only be called during registration or key rotation
    * @param {string} username - User identifier
-   * @param {string} encryptedPrivateKeyBase64 - Password-encrypted private key
+   * @param {Object} encryptedPrivateKeyData - Encrypted key object with { encryptedData, salt, iv, algorithm }
+   * @param {Object} encryptedSigningPrivateKeyData - Encrypted signing key object
    * @param {Object} metadata - Additional data (creation date, key version)
    * @returns {Promise<void>}
    */
-  async function savePrivateKey(username, encryptedPrivateKeyBase64, encryptedSigningPrivateKeyBase64 = null, metadata = {}) {
+  async function savePrivateKey(username, encryptedPrivateKeyData, encryptedSigningPrivateKeyData = null, metadata = {}) {
     try {
+      console.log("[savePrivateKey] START - username:", username);
+      
       // Get database connection
       const db = await initializeDatabase();
 
-      // Create transaction for writing to private_keys store
-      // readwrite: allows modification
-      const transaction = db.transaction([STORES.PRIVATE_KEYS], 'readwrite');
-
-      // Get reference to object store
-      const store = transaction.objectStore(STORES.PRIVATE_KEYS);
-
-      // Prepare data to store
+      // Prepare data to store FIRST before transaction
+      const encPrivateKeyStr = typeof encryptedPrivateKeyData === 'string' ? encryptedPrivateKeyData : JSON.stringify(encryptedPrivateKeyData);
+      const encSigningKeyStr = encryptedSigningPrivateKeyData ? (typeof encryptedSigningPrivateKeyData === 'string' ? encryptedSigningPrivateKeyData : JSON.stringify(encryptedSigningPrivateKeyData)) : null;
+      
       const data = {
-        username: username, // Key identifier
-        encrypted_private_key: encryptedPrivateKeyBase64, // Encrypted RSA private key
-        encrypted_signing_private_key: encryptedSigningPrivateKeyBase64 || null, // Optional encrypted signing key
-        created_at: metadata.created_at || new Date().toISOString(), // Creation timestamp
-        key_version: metadata.key_version || 1, // Version for key rotation
-        key_id: metadata.key_id || username + '_v1' // Unique key identifier
+        username: username,
+        encrypted_private_key: encPrivateKeyStr,
+        encrypted_signing_private_key: encSigningKeyStr,
+        created_at: metadata.created_at || new Date().toISOString(),
+        key_version: metadata.key_version || 1,
+        key_id: metadata.key_id || username + '_v1'
       };
 
-      // Put (insert or update) the private key in storage
-      const request = store.put(data);
+      console.log("[savePrivateKey] Prepared data, key length:", encPrivateKeyStr.length);
 
-      // Wait for write to complete
+      // Return promise that handles both request success AND transaction completion
       return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORES.PRIVATE_KEYS], 'readwrite');
+        const store = transaction.objectStore(STORES.PRIVATE_KEYS);
+        const request = store.put(data);
+
         // Handle successful write
         request.onsuccess = () => {
-          // Log success (in production, would use secure logger)
-          console.log(`Private key saved for ${username}`);
-          // Resolve promise
+          console.log(`[savePrivateKey] PUT succeeded`);
+        };
+
+        // Handle request error
+        request.onerror = () => {
+          console.error(`[savePrivateKey] PUT failed:`, request.error);
+          reject(new Error('Failed to save private key: ' + request.error));
+        };
+
+        // Handle transaction completion
+        transaction.oncomplete = () => {
+          console.log(`[savePrivateKey] Transaction complete - saved for ${username}`);
           resolve();
         };
 
-        // Handle write errors
-        request.onerror = () => {
-          // Reject with error
-          reject(new Error('Failed to save private key: ' + request.error));
+        // Handle transaction error
+        transaction.onerror = () => {
+          console.error(`[savePrivateKey] Transaction error:`, transaction.error);
+          reject(new Error('Transaction error: ' + transaction.error));
         };
       });
     } catch (error) {
-      // Log initialization errors
-      console.error('Error in savePrivateKey:', error);
-      // Re-throw for caller to handle
+      console.error('[savePrivateKey] Exception:', error);
       throw error;
     }
   }
@@ -156,76 +287,97 @@ const IndexedDBModule = (() => {
    * Load encrypted private key from IndexedDB
    * Returns encrypted key - must be decrypted with password
    * @param {string} username - User identifier
-   * @returns {Promise<string>} Encrypted private key (Base64), null if not found
+   * @returns {Promise<string|null>} Encrypted private key JSON string, null if not found
    */
   async function loadPrivateKey(username) {
     try {
+      console.log("[loadPrivateKey] Loading for:", username);
+      
       // Get database connection
       const db = await initializeDatabase();
 
-      // Create transaction for reading from private_keys store
-      // readonly: read-only access
-      const transaction = db.transaction([STORES.PRIVATE_KEYS], 'readonly');
-
-      // Get reference to object store
-      const store = transaction.objectStore(STORES.PRIVATE_KEYS);
-
-      // Request to get private key for user
-      const request = store.get(username);
-
-      // Wait for read to complete
       return new Promise((resolve, reject) => {
-        // Handle successful read
-        request.onsuccess = () => {
-          // Get the result
-          const result = request.result;
+        const transaction = db.transaction([STORES.PRIVATE_KEYS], 'readonly');
+        const store = transaction.objectStore(STORES.PRIVATE_KEYS);
+        const request = store.get(username);
 
-          // Check if key was found
-          if (result) {
-            // Return encrypted private key
-            resolve(result.encrypted_private_key);
+        request.onsuccess = () => {
+          const result = request.result;
+          
+          if (result && result.encrypted_private_key) {
+            console.log("[loadPrivateKey] Found! Key length:", result.encrypted_private_key.length);
+            const keyData = result.encrypted_private_key;
+            if (typeof keyData === 'string') {
+              resolve(keyData);
+            } else if (typeof keyData === 'object' && keyData !== null) {
+              resolve(JSON.stringify(keyData));
+            } else {
+              resolve(null);
+            }
           } else {
-            // Return null if not found
+            console.warn("[loadPrivateKey] NOT FOUND for:", username);
             resolve(null);
           }
         };
 
-        // Handle read errors
         request.onerror = () => {
-          // Reject with error
+          console.error('[loadPrivateKey] DB Error:', request.error);
           reject(new Error('Failed to load private key: ' + request.error));
+        };
+
+        transaction.onerror = () => {
+          console.error('[loadPrivateKey] Transaction error:', transaction.error);
+          reject(new Error('Transaction error: ' + transaction.error));
         };
       });
     } catch (error) {
-      // Log errors
-      console.error('Error in loadPrivateKey:', error);
-      // Re-throw for caller to handle
+      console.error('[loadPrivateKey] Exception:', error);
       throw error;
     }
   }
 
   async function loadSigningPrivateKey(username) {
     try {
+      console.log("[loadSigningPrivateKey] Loading for:", username);
+      
       const db = await initializeDatabase();
-      const transaction = db.transaction([STORES.PRIVATE_KEYS], 'readonly');
-      const store = transaction.objectStore(STORES.PRIVATE_KEYS);
-      const request = store.get(username);
 
       return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORES.PRIVATE_KEYS], 'readonly');
+        const store = transaction.objectStore(STORES.PRIVATE_KEYS);
+        const request = store.get(username);
+
         request.onsuccess = () => {
           const result = request.result;
-          if (result) {
-            resolve(result.encrypted_signing_private_key || null);
+          
+          if (result && result.encrypted_signing_private_key) {
+            console.log("[loadSigningPrivateKey] Found! Key length:", result.encrypted_signing_private_key.length);
+            const keyData = result.encrypted_signing_private_key;
+            if (typeof keyData === 'string') {
+              resolve(keyData);
+            } else if (typeof keyData === 'object' && keyData !== null) {
+              resolve(JSON.stringify(keyData));
+            } else {
+              resolve(null);
+            }
           } else {
+            console.warn("[loadSigningPrivateKey] NOT FOUND for:", username);
             resolve(null);
           }
         };
+
         request.onerror = () => {
+          console.error('[loadSigningPrivateKey] DB Error:', request.error);
           reject(new Error('Failed to load signing private key: ' + request.error));
+        };
+
+        transaction.onerror = () => {
+          console.error('[loadSigningPrivateKey] Transaction error:', transaction.error);
+          reject(new Error('Transaction error: ' + transaction.error));
         };
       });
     } catch (error) {
-      console.error('Error in loadSigningPrivateKey:', error);
+      console.error('[loadSigningPrivateKey] Exception:', error);
       throw error;
     }
   }
@@ -477,16 +629,62 @@ const IndexedDBModule = (() => {
     }
   }
 
+  /**
+   * Delete all stored keys for a specific user
+   * Used to clean up corrupted key data
+   * @param {string} username - Username to delete keys for
+   * @returns {Promise<void>}
+   */
+  async function deleteUserKeys(username) {
+    try {
+      console.log(`[deleteUserKeys] START - username: ${username}`);
+      const db = await initializeDatabase();
+      console.log(`[deleteUserKeys] Got database connection`);
+      
+      const transaction = db.transaction([STORES.PRIVATE_KEYS], 'readwrite');
+      console.log(`[deleteUserKeys] Created transaction`);
+      
+      const store = transaction.objectStore(STORES.PRIVATE_KEYS);
+      console.log(`[deleteUserKeys] Got object store`);
+      
+      const request = store.delete(username);
+      console.log(`[deleteUserKeys] Submitted DELETE request`);
+
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+          console.log(`[deleteUserKeys] SUCCESS - Deleted keys for ${username}`);
+          resolve();
+        };
+        request.onerror = () => {
+          console.error(`[deleteUserKeys] ERROR:`, request.error);
+          reject(new Error('Failed to delete user keys: ' + request.error));
+        };
+        
+        transaction.onerror = () => {
+          console.error(`[deleteUserKeys] TRANSACTION ERROR:`, transaction.error);
+          reject(new Error('Transaction error: ' + transaction.error));
+        };
+      });
+    } catch (error) {
+      console.error('[deleteUserKeys] Exception:', error);
+      throw error;
+    }
+  }
+
   // ========== PUBLIC API EXPORT ==========
 
   // Return public interface
   return {
     // Database initialization
     initializeDatabase,
+    // Password-based encryption for private keys
+    encryptPrivateKeyWithPassword,
+    decryptPrivateKeyWithPassword,
     // Private key operations
     savePrivateKey,
     loadPrivateKey,
     loadSigningPrivateKey,
+    deleteUserKeys,
     // Raw group key operations
     saveGroupKey,
     loadGroupKey,

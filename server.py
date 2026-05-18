@@ -9,6 +9,11 @@ import bcrypt
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 
+# Import new crypto and group route modules
+import crypto_routes
+import group_routes
+import auth
+
 # ========== APPLICATION SETUP ==========
 app = Flask(__name__)
 CORS(app)
@@ -33,6 +38,13 @@ def initialize_directories():
             os.makedirs(directory)
 
 initialize_directories()
+
+# ========== CONFIGURE AUTH MODULE ==========
+# Pass data directory paths to auth module for file operations
+auth.set_users_file(USERS_FILE)
+auth.set_groups_dir(GROUPS_DIR)
+auth.set_memberships_dir(MEMBERSHIPS_DIR)
+auth.set_roles_dir(ROLES_DIR)
 
 # ========== SECURITY HEADERS MIDDLEWARE ==========
 @app.after_request
@@ -880,6 +892,26 @@ def leave_group(username):
             return jsonify({"message": "Left group. Group deleted (no members left)"}), 200
     
     return jsonify({"message": "Left group successfully"}), 200
+
+# ========== INITIALIZE MODULAR ROUTES ==========
+# Create configuration dictionary for route modules
+ROUTE_CONFIG = {
+    'USERS_FILE': USERS_FILE,
+    'GROUPS_DIR': GROUPS_DIR,
+    'GROUP_KEYS_DIR': GROUP_KEYS_DIR,
+    'MEMBERSHIPS_DIR': MEMBERSHIPS_DIR,
+    'ROLES_DIR': ROLES_DIR,
+    'MESSAGES_DIR': MESSAGES_DIR,
+    'API_BASE': 'http://localhost:5000'
+}
+
+# Initialize crypto routes (public key distribution, group key management)
+# This handles /user_public_key, /user_public_keys_batch, /group_key_save, /group_key_load, /group_key_delete
+crypto_routes.create_crypto_routes(app, auth, ROUTE_CONFIG)
+
+# Initialize group routes (group creation, member management, message relay)
+# This handles /group_create, /group_add_member, /group_remove_member, /group_leave, /message_send, /messages_get
+group_routes.create_group_routes(app, crypto_routes, ROUTE_CONFIG)
 
 # ========== ERROR HANDLERS ==========
 @app.errorhandler(404)

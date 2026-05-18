@@ -118,28 +118,9 @@ async function handleLogin(username, password) {
     let loginPublicKeyBase64 = null;
     let loginSignaturePublicKeyBase64 = null;
 
-    // Try to derive the public key from a stored private key before login.
-    // This helps recover existing accounts that were created before public-key
-    // registration was fully supported.
-    try {
-      const encryptedPrivateKeyBase64 = await IndexedDBModule.loadPrivateKey(username);
-      if (encryptedPrivateKeyBase64) {
-        const derivedPublicKey = await CryptoModule.derivePublicKeyFromPrivateKey(encryptedPrivateKeyBase64);
-        loginPublicKeyBase64 = await CryptoModule.exportPublicKey(derivedPublicKey);
-      }
-    } catch (deriveError) {
-      console.warn("Could not derive public key from stored private key before login:", deriveError);
-    }
-
-    try {
-      const encryptedSigningPrivateKeyBase64 = await IndexedDBModule.loadSigningPrivateKey(username);
-      if (encryptedSigningPrivateKeyBase64) {
-        const derivedSigningPublicKey = await CryptoModule.derivePublicKeyFromPrivateKey(encryptedSigningPrivateKeyBase64, 'signature');
-        loginSignaturePublicKeyBase64 = await CryptoModule.exportPublicKey(derivedSigningPublicKey);
-      }
-    } catch (deriveError) {
-      console.warn("Could not derive signature public key from stored signing private key before login:", deriveError);
-    }
+    // NOTE: We cannot derive public keys from encrypted keys before login
+    // because they're encrypted with the password which we're about to verify.
+    // The server will handle key validation based on what we send after decryption.
 
     const response = await fetch(`${API_BASE_URL}/login`, {
       method: "POST",
@@ -164,17 +145,45 @@ async function handleLogin(username, password) {
     localStorage.setItem("authToken", authToken);
     localStorage.setItem("username", currentUsername);
 
-    // Load encrypted private key from IndexedDB and decrypt it
+
+    // Load encrypted private key from IndexedDB and decrypt with password
     // The private key is kept in memory for this session for crypto operations
     try {
-      const encryptedPrivateKeyBase64 = await IndexedDBModule.loadPrivateKey(username);
-      const encryptedSigningPrivateKeyBase64 = await IndexedDBModule.loadSigningPrivateKey(username);
+      console.log("[LOGIN] Username:", username);
+      const encryptedPrivateKeyData = await IndexedDBModule.loadPrivateKey(username);
+      const encryptedSigningPrivateKeyData = await IndexedDBModule.loadSigningPrivateKey(username);
 
-      if (encryptedPrivateKeyBase64) {
-        // Import the private key from storage
-        userPrivateKey = await CryptoModule.importPrivateKey(encryptedPrivateKeyBase64);
+      console.log("[LOGIN] loadPrivateKey result:", encryptedPrivateKeyData);
+      console.log("[LOGIN] loadSigningPrivateKey result:", encryptedSigningPrivateKeyData);
+
+      if (encryptedPrivateKeyData) {
+        try {
+          // Parse encrypted key data and decrypt with password
+          console.log("[LOGIN] Parsing and decrypting private key...");
+          const keyData = typeof encryptedPrivateKeyData === 'string' 
+            ? JSON.parse(encryptedPrivateKeyData) 
+            : encryptedPrivateKeyData;
+          console.log("[LOGIN] Parsed key data structure:", {
+            hasEncryptedData: !!keyData.encryptedData,
+            hasSalt: !!keyData.salt,
+            hasIv: !!keyData.iv
+          });
+          const decryptedPrivateKeyBase64 = await IndexedDBModule.decryptPrivateKeyWithPassword(keyData, password);
+          console.log("[LOGIN] Successfully decrypted private key, importing...");
+          // Import the decrypted private key
+          userPrivateKey = await CryptoModule.importPrivateKey(decryptedPrivateKeyBase64);
+          console.log("[LOGIN] Successfully imported private key");
+        } catch (decryptError) {
+          console.error("[LOGIN] Failed to decrypt private key:", decryptError);
+          alert("Incorrect password or corrupted key data");
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("username");
+          showAuthScreen();
+          attachAuthListeners();
+          return;
+        }
       } else {
-        console.warn("No private key found in storage. This is the first login.");
+        console.error("[LOGIN] No private key data found in IndexedDB for username:", username);
         alert("Private key not found. Please register again.");
         localStorage.removeItem("authToken");
         localStorage.removeItem("username");
@@ -183,8 +192,22 @@ async function handleLogin(username, password) {
         return;
       }
 
-      if (encryptedSigningPrivateKeyBase64) {
-        userSigningPrivateKey = await CryptoModule.importPrivateKey(encryptedSigningPrivateKeyBase64, 'sign');
+      if (encryptedSigningPrivateKeyData) {
+        try {
+          console.log("Parsing and decrypting signing private key...");
+          // Parse encrypted key data and decrypt with password
+          const signingKeyData = typeof encryptedSigningPrivateKeyData === 'string'
+            ? JSON.parse(encryptedSigningPrivateKeyData)
+            : encryptedSigningPrivateKeyData;
+          const decryptedSigningPrivateKeyBase64 = await IndexedDBModule.decryptPrivateKeyWithPassword(signingKeyData, password);
+          console.log("Successfully decrypted signing key, importing...");
+          // Import the decrypted signing private key
+          userSigningPrivateKey = await CryptoModule.importPrivateKey(decryptedSigningPrivateKeyBase64, 'sign');
+          console.log("Successfully imported signing key");
+        } catch (decryptError) {
+          console.warn("Failed to decrypt signing private key:", decryptError);
+          // Non-fatal - continue without signing key
+        }
       }
     } catch (dbError) {
       console.error("Failed to load private key:", dbError);
@@ -268,6 +291,15 @@ async function handleRegister(username, password) {
       return;
     }
 
+    // First, clean up any old corrupted keys if they exist
+    try {
+      console.log("Checking for old keys for user:", username);
+      await IndexedDBModule.deleteUserKeys(username);
+      console.log("Cleaned up old keys for user:", username);
+    } catch (cleanupError) {
+      console.warn("Could not clean old keys (this is OK if user is new):", cleanupError);
+    }
+
     // Show loading message
     alert("Generating encryption keys (this may take a few seconds)...");
 
@@ -305,11 +337,50 @@ async function handleRegister(username, password) {
       return;
     }
 
+
     // Registration successful - store encrypted private keys in IndexedDB
-    // The private keys are encrypted with a KDF derived from the password
-    // For now, we're just storing the private keys in IndexedDB
-    // In a production system, encrypt with password-derived key
-    await IndexedDBModule.savePrivateKey(username, privateKeyBase64, signingPrivateKeyBase64);
+    // The private keys are encrypted with password-derived key (PBKDF2 + AES-GCM)
+    // For security, keys are only decrypted after password verification on login
+    try {
+      // Encrypt private key with user's password
+      const encryptedKeyData = await IndexedDBModule.encryptPrivateKeyWithPassword(
+        privateKeyBase64,
+        password,
+        username
+      );
+
+      // Encrypt signing private key with user's password
+      const encryptedSigningKeyData = await IndexedDBModule.encryptPrivateKeyWithPassword(
+        signingPrivateKeyBase64,
+        password,
+        username
+      );
+
+      // Store encrypted keys in IndexedDB with encryption metadata
+      // NOTE: encryptedKeyData and encryptedSigningKeyData are objects, NOT strings
+      // They will be converted to JSON by savePrivateKey before storage
+      await IndexedDBModule.savePrivateKey(
+        username,
+        encryptedKeyData,
+        encryptedSigningKeyData,
+        {
+          created_at: new Date().toISOString(),
+          key_version: 1
+        }
+      );
+
+      // Immediately verify that the key was saved and can be loaded
+      const verifyKey = await IndexedDBModule.loadPrivateKey(username);
+      console.log("[POST-REGISTER VERIFY] Username:", username, "Loaded key:", verifyKey);
+      if (!verifyKey) {
+        alert("ERROR: Private key was NOT saved! Registration failed. Please try again or contact support.");
+        return;
+      }
+    } catch (keyStorageError) {
+      console.error('Error storing encrypted keys:', keyStorageError);
+      alert('Failed to store encryption keys securely');
+      return;
+    }
 
     alert("Registration successful! Your encryption keys have been created and stored securely. Please log in.");
     document.getElementById("registerUsername").value = "";
@@ -344,11 +415,14 @@ async function fetchUserPublicKey(username, keyType = 'encrypt') {
   }
 }
 
-async function fetchEncryptedGroupKeyFromServer(groupName) {
+async function fetchEncryptedGroupKeyFromServer(groupName, groupId) {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/group_key?group=${encodeURIComponent(groupName)}&token=${authToken}`
-    );
+    // Use groupId if available, otherwise fall back to old endpoint
+    const endpoint = groupId 
+      ? `${API_BASE_URL}/group_key_load?group_id=${encodeURIComponent(groupId)}&token=${authToken}`
+      : `${API_BASE_URL}/group_key?group=${encodeURIComponent(groupName)}&token=${authToken}`;
+    
+    const response = await fetch(endpoint);
     if (!response.ok) {
       return null;
     }
@@ -372,7 +446,7 @@ async function loadGroupKeyForChat(groupName, groupId) {
   }
 
   // Fallback: fetch encrypted group key from server and decrypt with private key
-  const encryptedKeyBase64 = await fetchEncryptedGroupKeyFromServer(groupName);
+  const encryptedKeyBase64 = await fetchEncryptedGroupKeyFromServer(groupName, resolvedGroupId);
   if (!encryptedKeyBase64) {
     return null;
   }
@@ -794,15 +868,15 @@ async function createGroup(groupName, members) {
     const groupKeyBase64 = await CryptoModule.exportGroupKey(groupKey);
     groupKeys[groupName] = groupKey;
 
-    // Send group creation request with encrypted group keys for recipients
-    const response = await fetch(`${API_BASE_URL}/group_add`, {
+    // Send group creation request with encrypted group key for creator
+    // The server will store encrypted group keys for all members
+    const response = await fetch(`${API_BASE_URL}/group_create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         temp_token: authToken,
-        groupname: groupName,
-        members: members,
-        encrypted_group_keys: encryptedGroupKeys
+        group_name: groupName,
+        encrypted_group_key: selfEncryptedKey
       })
     });
 
@@ -813,10 +887,45 @@ async function createGroup(groupName, members) {
     }
 
     const responseData = await response.json();
-    if (responseData.group_id) {
-      await IndexedDBModule.saveGroupKey(responseData.group_id, groupKeyBase64);
-      groupIdByName[groupName] = responseData.group_id;
-      currentChatId = responseData.group_id;
+    const groupId = responseData.group_id;
+    
+    // Save group key locally
+    if (groupId) {
+      await IndexedDBModule.saveGroupKey(groupId, groupKeyBase64);
+      groupIdByName[groupName] = groupId;
+      currentChatId = groupId;
+    }
+
+    // Add members to group (server will handle key re-encryption)
+    for (let memberUsername of members) {
+      try {
+        if (!memberUsername || memberUsername.toLowerCase() === currentUsername.toLowerCase()) {
+          continue;
+        }
+
+        const memberEncryptedKey = encryptedGroupKeys.find(k => k.username === memberUsername);
+        if (!memberEncryptedKey) {
+          continue;
+        }
+
+        const addMemberResponse = await fetch(`${API_BASE_URL}/group_add_member`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            temp_token: authToken,
+            group_id: groupId,
+            username: memberUsername,
+            encrypted_group_key: memberEncryptedKey.encrypted_group_key
+          })
+        });
+
+        if (!addMemberResponse.ok) {
+          const error = await addMemberResponse.json();
+          console.warn(`Failed to add ${memberUsername} to group: ${error.message}`);
+        }
+      } catch (error) {
+        console.warn(`Error adding member ${memberUsername}:`, error);
+      }
     }
 
     alert("Group created!");
@@ -865,8 +974,9 @@ function openChat(chatName, groupId) {
 
 async function loadMessages(chatName) {
   try {
+    // Use group ID instead of group name for message retrieval
     const response = await fetch(
-      `${API_BASE_URL}/messages?group=${encodeURIComponent(chatName)}&token=${authToken}`
+      `${API_BASE_URL}/messages_get?group_id=${encodeURIComponent(currentChatId)}&token=${authToken}`
     );
 
     if (!response.ok) {
@@ -1051,14 +1161,13 @@ async function sendMessage(chatName, messageText) {
     }
 
     // Send encrypted message to server
-    const response = await fetch(`${API_BASE_URL}/messages`, {
+    const response = await fetch(`${API_BASE_URL}/message_send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         temp_token: authToken,
-        group: chatName,
-        ciphertext: ciphertext,  // Encrypted message
-        nonce: nonce,            // IV for AES-GCM decryption
+        group_id: currentChatId,
+        encrypted_message: ciphertext,  // Encrypted message
         signature: signature
       })
     });
@@ -1095,7 +1204,7 @@ function attachLeaveGroupListener() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           temp_token: authToken,
-          group: currentChatName
+          group_id: currentChatId
         })
       });
 

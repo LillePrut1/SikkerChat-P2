@@ -1,9 +1,5 @@
 {
-  "friends": [
-    "test123"
-  ],
+  "friends": [],
   "incoming_requests": [],
-  "outgoing_requests": [
-    "test123"
-  ]
+  "outgoing_requests": []
 }
