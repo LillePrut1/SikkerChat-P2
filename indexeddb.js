@@ -21,6 +21,16 @@ const IndexedDBModule = (() => {
   // Cached database connection
   let cachedDB = null;
 
+  // Normalize username for storage and lookup.
+  // This ensures the local key store is case-insensitive and matches usernames
+  // even if the server returns a different case than the browser used during registration.
+  function normalizeUsername(username) {
+    if (!username || typeof username !== 'string') {
+      return username;
+    }
+    return username.trim().toLowerCase();
+  }
+
   // ========== DATABASE INITIALIZATION ==========
 
   /**
@@ -240,16 +250,21 @@ const IndexedDBModule = (() => {
       const encPrivateKeyStr = typeof encryptedPrivateKeyData === 'string' ? encryptedPrivateKeyData : JSON.stringify(encryptedPrivateKeyData);
       const encSigningKeyStr = encryptedSigningPrivateKeyData ? (typeof encryptedSigningPrivateKeyData === 'string' ? encryptedSigningPrivateKeyData : JSON.stringify(encryptedSigningPrivateKeyData)) : null;
       
+      const normalizedUsername = normalizeUsername(username);
+      if (!normalizedUsername) {
+        throw new Error('Invalid username for IndexedDB storage');
+      }
+
       const data = {
-        username: username,
+        username: normalizedUsername,
         encrypted_private_key: encPrivateKeyStr,
         encrypted_signing_private_key: encSigningKeyStr,
         created_at: metadata.created_at || new Date().toISOString(),
         key_version: metadata.key_version || 1,
-        key_id: metadata.key_id || username + '_v1'
+        key_id: metadata.key_id || normalizedUsername + '_v1'
       };
 
-      console.log("[savePrivateKey] Prepared data, key length:", encPrivateKeyStr.length);
+      console.log("[savePrivateKey] Prepared data for normalized username:", normalizedUsername, "key length:", encPrivateKeyStr.length);
 
       // Return promise that handles both request success AND transaction completion
       return new Promise((resolve, reject) => {
@@ -299,7 +314,8 @@ const IndexedDBModule = (() => {
    */
   async function loadPrivateKey(username) {
     try {
-      console.log("[loadPrivateKey] Loading for:", username);
+      const normalizedUsername = normalizeUsername(username);
+      console.log("[loadPrivateKey] Loading for:", username, "normalized:", normalizedUsername);
       
       // Get database connection
       const db = await initializeDatabase();
@@ -309,11 +325,9 @@ const IndexedDBModule = (() => {
         const store = transaction.objectStore(STORES.PRIVATE_KEYS);
         const request = store.get(username);
 
-        request.onsuccess = () => {
-          const result = request.result;
-          
+        const handleResult = (resultUsername, result) => {
           if (result && result.encrypted_private_key) {
-            console.log("[loadPrivateKey] Found! Key length:", result.encrypted_private_key.length);
+            console.log("[loadPrivateKey] Found! Username:", resultUsername, "Key length:", result.encrypted_private_key.length);
             const keyData = result.encrypted_private_key;
             if (typeof keyData === 'string') {
               resolve(keyData);
@@ -322,6 +336,41 @@ const IndexedDBModule = (() => {
             } else {
               resolve(null);
             }
+            return true;
+          }
+          return false;
+        };
+
+        request.onsuccess = () => {
+          const result = request.result;
+          if (handleResult(username, result)) {
+            return;
+          }
+
+          if (normalizedUsername && normalizedUsername !== username) {
+            console.log("[loadPrivateKey] Exact not found, trying normalized username:", normalizedUsername);
+            const fallbackTransaction = db.transaction([STORES.PRIVATE_KEYS], 'readonly');
+            const fallbackStore = fallbackTransaction.objectStore(STORES.PRIVATE_KEYS);
+            const fallbackRequest = fallbackStore.get(normalizedUsername);
+
+            fallbackRequest.onsuccess = () => {
+              const fallbackResult = fallbackRequest.result;
+              if (handleResult(normalizedUsername, fallbackResult)) {
+                return;
+              }
+              console.warn("[loadPrivateKey] NOT FOUND for:", username, "or normalized:", normalizedUsername);
+              resolve(null);
+            };
+
+            fallbackRequest.onerror = () => {
+              console.error('[loadPrivateKey] Fallback DB Error:', fallbackRequest.error);
+              reject(new Error('Failed to load private key: ' + fallbackRequest.error));
+            };
+
+            fallbackTransaction.onerror = () => {
+              console.error('[loadPrivateKey] Fallback transaction error:', fallbackTransaction.error);
+              reject(new Error('Transaction error: ' + fallbackTransaction.error));
+            };
           } else {
             console.warn("[loadPrivateKey] NOT FOUND for:", username);
             resolve(null);
@@ -346,7 +395,8 @@ const IndexedDBModule = (() => {
 
   async function loadSigningPrivateKey(username) {
     try {
-      console.log("[loadSigningPrivateKey] Loading for:", username);
+      const normalizedUsername = normalizeUsername(username);
+      console.log("[loadSigningPrivateKey] Loading for:", username, "normalized:", normalizedUsername);
       
       const db = await initializeDatabase();
 
@@ -355,11 +405,9 @@ const IndexedDBModule = (() => {
         const store = transaction.objectStore(STORES.PRIVATE_KEYS);
         const request = store.get(username);
 
-        request.onsuccess = () => {
-          const result = request.result;
-          
+        const handleResult = (resultUsername, result) => {
           if (result && result.encrypted_signing_private_key) {
-            console.log("[loadSigningPrivateKey] Found! Key length:", result.encrypted_signing_private_key.length);
+            console.log("[loadSigningPrivateKey] Found! Username:", resultUsername, "Key length:", result.encrypted_signing_private_key.length);
             const keyData = result.encrypted_signing_private_key;
             if (typeof keyData === 'string') {
               resolve(keyData);
@@ -368,6 +416,41 @@ const IndexedDBModule = (() => {
             } else {
               resolve(null);
             }
+            return true;
+          }
+          return false;
+        };
+
+        request.onsuccess = () => {
+          const result = request.result;
+          if (handleResult(username, result)) {
+            return;
+          }
+
+          if (normalizedUsername && normalizedUsername !== username) {
+            console.log("[loadSigningPrivateKey] Exact not found, trying normalized username:", normalizedUsername);
+            const fallbackTransaction = db.transaction([STORES.PRIVATE_KEYS], 'readonly');
+            const fallbackStore = fallbackTransaction.objectStore(STORES.PRIVATE_KEYS);
+            const fallbackRequest = fallbackStore.get(normalizedUsername);
+
+            fallbackRequest.onsuccess = () => {
+              const fallbackResult = fallbackRequest.result;
+              if (handleResult(normalizedUsername, fallbackResult)) {
+                return;
+              }
+              console.warn("[loadSigningPrivateKey] NOT FOUND for:", username, "or normalized:", normalizedUsername);
+              resolve(null);
+            };
+
+            fallbackRequest.onerror = () => {
+              console.error('[loadSigningPrivateKey] Fallback DB Error:', fallbackRequest.error);
+              reject(new Error('Failed to load signing private key: ' + fallbackRequest.error));
+            };
+
+            fallbackTransaction.onerror = () => {
+              console.error('[loadSigningPrivateKey] Fallback transaction error:', fallbackTransaction.error);
+              reject(new Error('Transaction error: ' + fallbackTransaction.error));
+            };
           } else {
             console.warn("[loadSigningPrivateKey] NOT FOUND for:", username);
             resolve(null);
