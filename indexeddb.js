@@ -232,6 +232,9 @@ const IndexedDBModule = (() => {
       
       // Get database connection
       const db = await initializeDatabase();
+      if (!db) {
+        throw new Error("Failed to get database connection");
+      }
 
       // Prepare data to store FIRST before transaction
       const encPrivateKeyStr = typeof encryptedPrivateKeyData === 'string' ? encryptedPrivateKeyData : JSON.stringify(encryptedPrivateKeyData);
@@ -250,32 +253,37 @@ const IndexedDBModule = (() => {
 
       // Return promise that handles both request success AND transaction completion
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction([STORES.PRIVATE_KEYS], 'readwrite');
-        const store = transaction.objectStore(STORES.PRIVATE_KEYS);
-        const request = store.put(data);
+        try {
+          const transaction = db.transaction([STORES.PRIVATE_KEYS], 'readwrite');
+          const store = transaction.objectStore(STORES.PRIVATE_KEYS);
+          const request = store.put(data);
 
-        // Handle successful write
-        request.onsuccess = () => {
-          console.log(`[savePrivateKey] PUT succeeded`);
-        };
+          // Handle successful write
+          request.onsuccess = () => {
+            console.log(`[savePrivateKey] PUT succeeded`);
+          };
 
-        // Handle request error
-        request.onerror = () => {
-          console.error(`[savePrivateKey] PUT failed:`, request.error);
-          reject(new Error('Failed to save private key: ' + request.error));
-        };
+          // Handle request error
+          request.onerror = () => {
+            console.error(`[savePrivateKey] PUT failed:`, request.error);
+            reject(new Error('Failed to save private key: ' + request.error));
+          };
 
-        // Handle transaction completion
-        transaction.oncomplete = () => {
-          console.log(`[savePrivateKey] Transaction complete - saved for ${username}`);
-          resolve();
-        };
+          // Handle transaction completion
+          transaction.oncomplete = () => {
+            console.log(`[savePrivateKey] Transaction complete - saved for ${username}`);
+            resolve();
+          };
 
-        // Handle transaction error
-        transaction.onerror = () => {
-          console.error(`[savePrivateKey] Transaction error:`, transaction.error);
-          reject(new Error('Transaction error: ' + transaction.error));
-        };
+          // Handle transaction error
+          transaction.onerror = () => {
+            console.error(`[savePrivateKey] Transaction error:`, transaction.error);
+            reject(new Error('Transaction error: ' + transaction.error));
+          };
+        } catch (txnError) {
+          console.error('[savePrivateKey] Transaction creation error:', txnError);
+          reject(txnError);
+        }
       });
     } catch (error) {
       console.error('[savePrivateKey] Exception:', error);

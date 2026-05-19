@@ -379,6 +379,32 @@ def login():
         "message": "Login successful"
     }), 200
 
+@app.route("/dev/reset", methods=["POST"])
+def dev_reset():
+    """Reset development data store when DEV_RESET_ENABLED=true."""
+    dev_reset_enabled = os.environ.get("DEV_RESET_ENABLED", "false").lower() == "true"
+    if not dev_reset_enabled:
+        return jsonify({"message": "Dev reset disabled"}), 403
+
+    reset_key = os.environ.get("DEV_RESET_KEY")
+    request_data = request.get_json(silent=True) or {}
+    if reset_key and request_data.get("reset_key") != reset_key:
+        return jsonify({"message": "Invalid reset key"}), 403
+
+    try:
+        for root, _, files in os.walk(DATA_DIR):
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+
+        initialize_directories()
+        save_json(USERS_FILE, {})
+
+        return jsonify({"message": "Development reset completed"}), 200
+    except Exception as e:
+        return jsonify({"message": f"Reset failed: {str(e)}"}), 500
+
 # ========== FRIEND SYSTEM ROUTES =========
 @app.route("/friend_request_send", methods=["POST"])
 @require_auth

@@ -920,6 +920,33 @@ body {
   display: none !important;
 }
 
+.auth-status {
+  margin: 16px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+
+.auth-status.info {
+  background: rgba(15, 115, 255, 0.1);
+  color: #0f62ff;
+  border-color: rgba(15, 115, 255, 0.2);
+}
+
+.auth-status.success {
+  background: rgba(6, 150, 100, 0.1);
+  color: #067a3f;
+  border-color: rgba(6, 150, 100, 0.2);
+}
+
+.auth-status.error {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
 /* ========== RESPONSIVE DESIGN ========== */
 /* Mobile layout adjustments */
 @media (max-width: 768px) {

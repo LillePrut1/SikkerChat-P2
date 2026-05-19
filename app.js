@@ -22,6 +22,11 @@ let appState = {
   currentMessages: []
 };
 
+let authListenersAttached = false;
+let eventListenersAttached = false;
+let isRegistering = false;
+let isLoggingIn = false;
+
 /* ========== INITIALIZATION ========== */
 document.addEventListener("DOMContentLoaded", async function() {
   // Initialize IndexedDB first (crypto key storage)
@@ -56,6 +61,10 @@ function initializeApp() {
 
 /* ========== AUTH SCREEN ========== */
 function attachAuthListeners() {
+  if (authListenersAttached) {
+    return;
+  }
+
   const loginTabBtn = document.getElementById("loginTabBtn");
   const registerTabBtn = document.getElementById("registerTabBtn");
   const loginForm = document.getElementById("loginForm");
@@ -66,6 +75,7 @@ function attachAuthListeners() {
     loginTabBtn.classList.add("active");
     registerForm.classList.remove("active");
     loginForm.classList.add("active");
+    clearAuthStatus();
   });
 
   registerTabBtn.addEventListener("click", () => {
@@ -73,47 +83,66 @@ function attachAuthListeners() {
     registerTabBtn.classList.add("active");
     loginForm.classList.remove("active");
     registerForm.classList.add("active");
+    clearAuthStatus();
   });
 
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isLoggingIn) {
+      return;
+    }
+
     const username = document.getElementById("loginUsername").value.trim();
     const password = document.getElementById("loginPassword").value.trim();
 
     if (!username || !password) {
-      alert("Please fill all fields");
+      setAuthStatus("Please fill all fields", "error");
       return;
     }
 
+    setAuthStatus("Authenticating...", "info");
     await handleLogin(username, password);
   });
 
   registerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isRegistering) {
+      return;
+    }
+
     const username = document.getElementById("registerUsername").value.trim();
     const password = document.getElementById("registerPassword").value.trim();
     const confirmPassword = document.getElementById("registerConfirmPassword").value.trim();
 
     if (!username || !password) {
-      alert("Please fill all fields");
+      setAuthStatus("Please fill all fields", "error");
       return;
     }
 
     if (password !== confirmPassword) {
-      alert("Passwords do not match");
+      setAuthStatus("Passwords do not match", "error");
       return;
     }
 
     if (password.length < 6) {
-      alert("Password must be at least 6 characters");
+      setAuthStatus("Password must be at least 6 characters", "error");
       return;
     }
 
     await handleRegister(username, password);
   });
+
+  authListenersAttached = true;
 }
 
 async function handleLogin(username, password) {
+  const loginBtn = document.getElementById("loginBtn");
+  if (isLoggingIn) {
+    return;
+  }
+  isLoggingIn = true;
+  loginBtn.disabled = true;
+
   try {
     // ========== STEP 1: AUTHENTICATE WITH SERVER ==========
     console.log("[LOGIN] Step 1: Authenticating with server...");
@@ -136,28 +165,45 @@ async function handleLogin(username, password) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await parseErrorResponse(response);
       console.error("[LOGIN] Server authentication failed:", error);
-      alert(`Login failed: ${error.message}`);
+      setAuthStatus(`Login failed: ${error.message}`, "error");
       return;
     }
 
-    const data = await response.json();
+    const data = await response.json().catch((error) => {
+      console.error("[LOGIN] Failed to parse login response JSON:", error);
+      throw new Error("Invalid server response during login");
+    });
+    
+    console.log("[LOGIN] Full server response:", data);
+    console.log("[LOGIN] data.username =", data.username, "typeof:", typeof data.username);
+    
     authToken = data.token;
-    currentUsername = username;
+    if (!authToken) {
+      console.error("[LOGIN] Login response missing token:", data);
+      setAuthStatus("Login failed: invalid server response", "error");
+      return;
+    }
+
+    // Use the server's canonical username (handles case-insensitive lookups)
+    currentUsername = data.username || username;
+    console.log("[LOGIN] Using canonical username from server:", currentUsername, "typeof:", typeof currentUsername);
+    
     localStorage.setItem("authToken", authToken);
     localStorage.setItem("username", currentUsername);
     console.log("[LOGIN] Step 1 OK: Server authenticated, token received");
+    setAuthStatus("Login successful, loading keys...", "info");
 
     // ========== STEP 2: LOAD ENCRYPTED PRIVATE KEYS FROM INDEXEDDB ==========
     console.log("[LOGIN] Step 2: Loading encrypted private keys from IndexedDB...");
     // Load encrypted private key from IndexedDB and decrypt with password
     // The private key is kept in memory for this session for crypto operations
     try {
-      console.log("[LOGIN] Step 2a: Loading encryption private key for username:", username);
-      const encryptedPrivateKeyData = await IndexedDBModule.loadPrivateKey(username);
-      console.log("[LOGIN] Step 2b: Loading signing private key for username:", username);
-      const encryptedSigningPrivateKeyData = await IndexedDBModule.loadSigningPrivateKey(username);
+      console.log("[LOGIN] Step 2a: Loading encryption private key for username:", currentUsername);
+      const encryptedPrivateKeyData = await IndexedDBModule.loadPrivateKey(currentUsername);
+      console.log("[LOGIN] Step 2b: Loading signing private key for username:", currentUsername);
+      const encryptedSigningPrivateKeyData = await IndexedDBModule.loadSigningPrivateKey(currentUsername);
 
       console.log("[LOGIN] Step 2c: Load results:", {
         hasEncryptionKey: !!encryptedPrivateKeyData,
@@ -188,7 +234,7 @@ async function handleLogin(username, password) {
           console.log("[LOGIN] Step 3c: Successfully imported encryption private key (CryptoKey)");
         } catch (decryptError) {
           console.error("[LOGIN] FAILED to decrypt/import encryption private key:", decryptError);
-          alert("Incorrect password or corrupted key data");
+          setAuthStatus("Incorrect password or corrupted key data", "error");
           localStorage.removeItem("authToken");
           localStorage.removeItem("username");
           showAuthScreen();
@@ -198,7 +244,7 @@ async function handleLogin(username, password) {
       } else {
         console.error("[LOGIN] CRITICAL: No encryption private key found in IndexedDB for username:", username);
         console.error("[LOGIN] This user has not registered yet, or registration failed to save keys.");
-        alert("Private key not found. Please register first.");
+        setAuthStatus("Private key not found. Please register first.", "error");
         localStorage.removeItem("authToken");
         localStorage.removeItem("username");
         showAuthScreen();
@@ -228,7 +274,7 @@ async function handleLogin(username, password) {
     } catch (dbError) {
       console.error("[LOGIN] CRITICAL DB ERROR during key loading:", dbError);
       console.error("[LOGIN] Stack trace:", dbError.stack);
-      alert("Failed to load encryption keys: " + dbError.message);
+      setAuthStatus("Failed to load encryption keys: " + dbError.message, "error");
       localStorage.removeItem("authToken");
       localStorage.removeItem("username");
       showAuthScreen();
@@ -295,36 +341,53 @@ async function handleLogin(username, password) {
     document.getElementById("loginPassword").value = "";
 
     showDashboard();
-    loadDashboardData();
+    setAuthStatus("Login successful. Loading dashboard...", "info");
+    await loadDashboardData();
     attachEventListeners();
 
   } catch (error) {
     console.error("Login error:", error);
-    alert("Login error");
+    setAuthStatus("Login error: " + error.message, "error");
+  } finally {
+    isLoggingIn = false;
+    loginBtn.disabled = false;
   }
 }
 
 async function handleRegister(username, password) {
+  const registerBtn = document.getElementById("registerBtn");
+  if (isRegistering) {
+    return;
+  }
+  isRegistering = true;
+  registerBtn.disabled = true;
+  setAuthStatus("Generating encryption keys and preparing registration...", "info");
+
+  if (!dbReady) {
+    setAuthStatus("Database not ready. Please refresh the page and try again.", "error");
+    isRegistering = false;
+    registerBtn.disabled = false;
+    return;
+  }
+
   try {
     // ========== INPUT VALIDATION ==========
     console.log("[REGISTER] Step 1: Validating input...");
-    // Input validation
     const usernameValidation = SanitizeModule.validateUsername(username);
     if (!usernameValidation.isValid) {
-      alert("Username error: " + usernameValidation.error);
+      setAuthStatus("Username error: " + usernameValidation.error, "error");
       return;
     }
 
     const passwordValidation = SanitizeModule.validatePassword(password);
     if (!passwordValidation.isValid) {
-      alert("Password error: " + passwordValidation.error);
+      setAuthStatus("Password error: " + passwordValidation.error, "error");
       return;
     }
     console.log("[REGISTER] Step 1 OK: Input validated");
 
     // ========== CLEAN UP OLD KEYS (if corrupted) ==========
     console.log("[REGISTER] Step 2: Checking for old keys...");
-    // First, clean up any old corrupted keys if they exist
     try {
       console.log("[REGISTER] Deleting any old/corrupted keys for user:", username);
       await IndexedDBModule.deleteUserKeys(username);
@@ -335,17 +398,13 @@ async function handleRegister(username, password) {
 
     // ========== KEY GENERATION ==========
     console.log("[REGISTER] Step 3: Generating new key pairs...");
-    // Show loading message
-    alert("Generating encryption keys (this may take a few seconds)...");
+    setAuthStatus("Generating encryption keys. This may take a few seconds.", "info");
 
-    // Generate RSA-4096 key pair for this user
-    console.log("[REGISTER] Step 3a: Generating RSA-OAEP key pair...");
     const keyPair = await CryptoModule.generateKeyPair();
     userPublicKey = keyPair.publicKey;
     const privateKey = keyPair.privateKey;
     console.log("[REGISTER] Step 3b: RSA-OAEP key pair generated");
 
-    // Generate a separate RSA-PSS key pair for digital signatures
     console.log("[REGISTER] Step 3c: Generating RSA-PSS signing key pair...");
     const signatureKeyPair = await CryptoModule.generateSignatureKeyPair();
     userSigningPublicKey = signatureKeyPair.publicKey;
@@ -354,7 +413,6 @@ async function handleRegister(username, password) {
 
     // ========== EXPORT KEYS ==========
     console.log("[REGISTER] Step 4: Exporting keys for storage...");
-    // Export public keys to send to server
     const publicKeyBase64 = await CryptoModule.exportPublicKey(keyPair.publicKey);
     const signaturePublicKeyBase64 = await CryptoModule.exportPublicKey(signatureKeyPair.publicKey);
     const privateKeyBase64 = await CryptoModule.exportPrivateKey(keyPair.privateKey);
@@ -363,33 +421,46 @@ async function handleRegister(username, password) {
 
     // ========== SEND REGISTRATION TO SERVER ==========
     console.log("[REGISTER] Step 5: Sending registration to server...");
-    // Send registration request with both encryption and signature public keys
-    const response = await fetch(`${API_BASE_URL}/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        username: username, 
-        password: password,
-        public_key: publicKeyBase64,
-        signature_public_key: signaturePublicKeyBase64
-      })
-    });
+    setAuthStatus("Submitting registration to server...", "info");
+
+    const response = await retryWithBackoff(async (attempt, totalAttempts) => {
+      if (attempt > 1) {
+        setAuthStatus(`Retrying registration (${attempt}/${totalAttempts})...`, "info");
+      }
+
+      const retryResponse = await fetch(`${API_BASE_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          username: username, 
+          password: password,
+          public_key: publicKeyBase64,
+          signature_public_key: signaturePublicKeyBase64
+        })
+      });
+
+      if (!retryResponse.ok) {
+        if (retryResponse.status >= 500) {
+          const error = await parseErrorResponse(retryResponse);
+          throw new Error(error.message || `Server error ${retryResponse.status}`);
+        }
+        return retryResponse;
+      }
+      return retryResponse;
+    }, 3, 750);
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await parseErrorResponse(response);
       console.error("[REGISTER] Server rejected registration:", error);
-      alert(`Registration failed: ${error.message}`);
+      setAuthStatus(`Registration failed: ${error.message}`, "error");
       return;
     }
     console.log("[REGISTER] Step 5 OK: Server accepted registration");
 
     // ========== ENCRYPT AND STORE PRIVATE KEYS ==========
     console.log("[REGISTER] Step 6: Encrypting and storing private keys...");
-    // Registration successful - store encrypted private keys in IndexedDB
-    // The private keys are encrypted with password-derived key (PBKDF2 + AES-GCM)
-    // For security, keys are only decrypted after password verification on login
+    setAuthStatus("Encrypting and storing private keys locally...", "info");
     try {
-      // Encrypt private key with user's password
       console.log("[REGISTER] Step 6a: Encrypting encryption private key with password...");
       const encryptedKeyData = await IndexedDBModule.encryptPrivateKeyWithPassword(
         privateKeyBase64,
@@ -403,7 +474,6 @@ async function handleRegister(username, password) {
         encryptedDataLength: encryptedKeyData.encryptedData.length
       });
 
-      // Encrypt signing private key with user's password
       console.log("[REGISTER] Step 6c: Encrypting signing private key with password...");
       const encryptedSigningKeyData = await IndexedDBModule.encryptPrivateKeyWithPassword(
         signingPrivateKeyBase64,
@@ -412,9 +482,6 @@ async function handleRegister(username, password) {
       );
       console.log("[REGISTER] Step 6d: Signing private key encrypted");
 
-      // Store encrypted keys in IndexedDB with encryption metadata
-      // NOTE: encryptedKeyData and encryptedSigningKeyData are objects, NOT strings
-      // They will be converted to JSON by savePrivateKey before storage
       console.log("[REGISTER] Step 6e: Saving encrypted keys to IndexedDB...");
       await IndexedDBModule.savePrivateKey(
         username,
@@ -427,31 +494,29 @@ async function handleRegister(username, password) {
       );
       console.log("[REGISTER] Step 6f: Keys saved to IndexedDB");
 
-      // Immediately verify that the key was saved and can be loaded
       console.log("[REGISTER] Step 6g: Verifying saved keys...");
       const verifyKey = await IndexedDBModule.loadPrivateKey(username);
       console.log("[REGISTER] Step 6h: Verification result - Key loaded:", !!verifyKey);
       
       if (!verifyKey) {
         console.error("[REGISTER] CRITICAL: Private key was NOT saved!");
-        alert("ERROR: Private key was NOT saved! Registration failed. Please try again or contact support.");
+        setAuthStatus("ERROR: Private key was NOT saved. Please try again.", "error");
         return;
       }
       console.log("[REGISTER] Step 6i: Verification PASSED - Keys persisted successfully");
     } catch (keyStorageError) {
       console.error('[REGISTER] CRITICAL ERROR during key storage:', keyStorageError);
       console.error('[REGISTER] Stack trace:', keyStorageError.stack);
-      alert('Failed to store encryption keys securely');
+      setAuthStatus('Failed to store encryption keys securely', "error");
       return;
     }
 
     console.log("[REGISTER] Registration COMPLETE!");
-    alert("Registration successful! Your encryption keys have been created and stored securely. Please log in.");
+    setAuthStatus("Registration successful! Please log in.", "success");
     document.getElementById("registerUsername").value = "";
     document.getElementById("registerPassword").value = "";
     document.getElementById("registerConfirmPassword").value = "";
 
-    // Clear key from memory
     userPublicKey = null;
 
     document.getElementById("loginTabBtn").click();
@@ -459,7 +524,10 @@ async function handleRegister(username, password) {
   } catch (error) {
     console.error("[REGISTER] CRITICAL EXCEPTION:", error);
     console.error("[REGISTER] Stack trace:", error.stack);
-    alert("Registration error: " + error.message);
+    setAuthStatus("Registration error: " + error.message, "error");
+  } finally {
+    isRegistering = false;
+    registerBtn.disabled = false;
   }
 }
 
@@ -546,6 +614,7 @@ async function loadGroupKeyForChat(groupName, groupId) {
 function showAuthScreen() {
   document.getElementById("authScreen").classList.remove("hidden");
   document.getElementById("dashboard").classList.add("hidden");
+  clearAuthStatus();
 }
 
 function showDashboard() {
@@ -571,6 +640,8 @@ function showChatView() {
 
 /* ========== LOAD DASHBOARD DATA ========== */
 async function loadDashboardData() {
+  let dashboardDataLoaded = false;
+
   try {
     const requestsResponse = await fetch(
       `${API_BASE_URL}/friend_requests?token=${authToken}`
@@ -598,11 +669,16 @@ async function loadDashboardData() {
       }, {});
     }
 
-    renderDashboard();
-    showControlPanel();
-
+    dashboardDataLoaded = true;
   } catch (error) {
     console.error("Error loading dashboard data:", error);
+    setAuthStatus("Logged in, but dashboard data could not be loaded.", "error");
+  } finally {
+    renderDashboard();
+    showControlPanel();
+    if (dashboardDataLoaded) {
+      setAuthStatus("Dashboard loaded successfully.", "success");
+    }
   }
 }
 
@@ -735,6 +811,10 @@ async function handleRequestAction(action, requester) {
 
 /* ========== EVENT LISTENERS ========== */
 function attachEventListeners() {
+  if (eventListenersAttached) {
+    return;
+  }
+
   attachLogoutListener();
   attachAddFriendListeners();
   attachCreateGroupListeners();
@@ -743,6 +823,60 @@ function attachEventListeners() {
   attachLeaveGroupListener();
   attachDeleteGroupListener();
   attachBackButtonListener();
+  eventListenersAttached = true;
+}
+
+function setAuthStatus(message, type = "info") {
+  const statusEl = document.getElementById("authStatus");
+  if (!statusEl) {
+    return;
+  }
+
+  statusEl.textContent = message || "";
+  statusEl.className = `auth-status ${message ? type : "hidden"}`;
+  if (!message) {
+    statusEl.classList.add("hidden");
+  }
+}
+
+function clearAuthStatus() {
+  setAuthStatus("");
+}
+
+async function retryWithBackoff(operation, attempts = 3, initialDelayMs = 500) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation(attempt, attempts);
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) {
+        break;
+      }
+      const delayMs = initialDelayMs * Math.pow(2, attempt - 1);
+      setAuthStatus(`Registration attempt ${attempt} failed, retrying in ${Math.round(delayMs / 1000)}s...`, "info");
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
+async function parseErrorResponse(response) {
+  if (!response || typeof response.clone !== "function") {
+    return { message: `HTTP ${response.status}` };
+  }
+
+  const clone = response.clone();
+  try {
+    return await clone.json();
+  } catch (err) {
+    try {
+      const text = await clone.text();
+      return { message: text || `HTTP ${response.status}` };
+    } catch (_innerErr) {
+      return { message: `HTTP ${response.status}` };
+    }
+  }
 }
 
 function attachLogoutListener() {
