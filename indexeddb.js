@@ -558,8 +558,18 @@ const IndexedDBModule = (() => {
   // ========== SENSITIVE DATA CLEANUP ==========
 
   /**
-   * Delete all sensitive data from IndexedDB on logout
-   * Ensures no keys remain in storage after user leaves
+   * Clear session data from memory on logout
+   * IMPORTANT: Does NOT delete persistent encrypted private keys!
+   * 
+   * Logout should only clear:
+   * - Temporary decrypted keys in memory (RAM)
+   * - Group key cache from this session
+   * 
+   * Logout should NOT delete:
+   * - Encrypted private key (persisted in IndexedDB for next login)
+   * - Encrypted group keys (persisted for member re-use)
+   * 
+   * This ensures users can login again without re-registering
    * @param {string} username - User identifier
    * @returns {Promise<void>}
    */
@@ -568,32 +578,31 @@ const IndexedDBModule = (() => {
       // Get database connection
       const db = await initializeDatabase();
 
-      // Create transaction for deleting from multiple stores
+      // Create transaction for clearing ONLY temporary session data
+      // DO NOT delete persistent encrypted private keys!
       const transaction = db.transaction(
-        [STORES.PRIVATE_KEYS, STORES.GROUP_KEYS, STORES.ENCRYPTED_GROUP_KEYS],
+        [STORES.GROUP_KEYS],  // ONLY clear RAM-cached group keys
         'readwrite'
       );
 
-      // Delete private key
-      const privKeyStore = transaction.objectStore(STORES.PRIVATE_KEYS);
-      privKeyStore.delete(username);
+      // CRITICAL: Do NOT delete private key from STORES.PRIVATE_KEYS
+      // The encrypted private key must persist for the next login
+      // Users should not need to re-register after logout
 
-      // Delete all group keys (should already be cleared from RAM)
+      // Clear only the temporarily cached group keys (these were loaded into memory)
+      // These can be re-loaded from server or re-derived on next login
       const groupKeyStore = transaction.objectStore(STORES.GROUP_KEYS);
       groupKeyStore.clear();
 
-      // Delete all encrypted group keys for user
-      const encGroupKeyStore = transaction.objectStore(STORES.ENCRYPTED_GROUP_KEYS);
-      const index = encGroupKeyStore.index('group_user');
-      const range = IDBKeyRange.bound([undefined, username], [undefined, username], false, false);
-      // Note: This simple approach clears all group keys - in production might want selective deletion
+      // Note: STORES.ENCRYPTED_GROUP_KEYS is also kept for persistence
+      // Encrypted group keys per user are needed after re-login
 
-      // Wait for all deletions to complete
+      // Wait for cache clearing to complete
       return new Promise((resolve, reject) => {
         // Handle successful completion
         transaction.oncomplete = () => {
-          // Log success
-          console.log(`Cleared all sensitive data for ${username}`);
+          // Log that session data was cleared (but persistent keys kept)
+          console.log(`[LOGOUT] Cleared session cache for ${username} (encrypted keys PRESERVED in IndexedDB)`);
           // Resolve promise
           resolve();
         };
@@ -601,12 +610,12 @@ const IndexedDBModule = (() => {
         // Handle transaction errors
         transaction.onerror = () => {
           // Reject with error
-          reject(new Error('Failed to clear sensitive data: ' + transaction.error));
+          reject(new Error('Failed to clear session data: ' + transaction.error));
         };
       });
     } catch (error) {
       // Log errors
-      console.error('Error in clearSensitiveData:', error);
+      console.error('[LOGOUT ERROR] in clearSensitiveData:', error);
       // Re-throw for caller to handle
       throw error;
     }

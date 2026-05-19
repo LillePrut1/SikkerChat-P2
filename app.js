@@ -115,6 +115,8 @@ function attachAuthListeners() {
 
 async function handleLogin(username, password) {
   try {
+    // ========== STEP 1: AUTHENTICATE WITH SERVER ==========
+    console.log("[LOGIN] Step 1: Authenticating with server...");
     let loginPublicKeyBase64 = null;
     let loginSignaturePublicKeyBase64 = null;
 
@@ -135,6 +137,7 @@ async function handleLogin(username, password) {
 
     if (!response.ok) {
       const error = await response.json();
+      console.error("[LOGIN] Server authentication failed:", error);
       alert(`Login failed: ${error.message}`);
       return;
     }
@@ -144,37 +147,47 @@ async function handleLogin(username, password) {
     currentUsername = username;
     localStorage.setItem("authToken", authToken);
     localStorage.setItem("username", currentUsername);
+    console.log("[LOGIN] Step 1 OK: Server authenticated, token received");
 
-
+    // ========== STEP 2: LOAD ENCRYPTED PRIVATE KEYS FROM INDEXEDDB ==========
+    console.log("[LOGIN] Step 2: Loading encrypted private keys from IndexedDB...");
     // Load encrypted private key from IndexedDB and decrypt with password
     // The private key is kept in memory for this session for crypto operations
     try {
-      console.log("[LOGIN] Username:", username);
+      console.log("[LOGIN] Step 2a: Loading encryption private key for username:", username);
       const encryptedPrivateKeyData = await IndexedDBModule.loadPrivateKey(username);
+      console.log("[LOGIN] Step 2b: Loading signing private key for username:", username);
       const encryptedSigningPrivateKeyData = await IndexedDBModule.loadSigningPrivateKey(username);
 
-      console.log("[LOGIN] loadPrivateKey result:", encryptedPrivateKeyData);
-      console.log("[LOGIN] loadSigningPrivateKey result:", encryptedSigningPrivateKeyData);
+      console.log("[LOGIN] Step 2c: Load results:", {
+        hasEncryptionKey: !!encryptedPrivateKeyData,
+        hasSigningKey: !!encryptedSigningPrivateKeyData
+      });
 
+      // ========== STEP 3: DECRYPT PRIVATE KEYS ==========
       if (encryptedPrivateKeyData) {
         try {
+          console.log("[LOGIN] Step 3: Decrypting encryption private key...");
           // Parse encrypted key data and decrypt with password
-          console.log("[LOGIN] Parsing and decrypting private key...");
           const keyData = typeof encryptedPrivateKeyData === 'string' 
             ? JSON.parse(encryptedPrivateKeyData) 
             : encryptedPrivateKeyData;
-          console.log("[LOGIN] Parsed key data structure:", {
+          
+          console.log("[LOGIN] Step 3a: Parsed encryption key structure:", {
             hasEncryptedData: !!keyData.encryptedData,
             hasSalt: !!keyData.salt,
             hasIv: !!keyData.iv
           });
+          
           const decryptedPrivateKeyBase64 = await IndexedDBModule.decryptPrivateKeyWithPassword(keyData, password);
-          console.log("[LOGIN] Successfully decrypted private key, importing...");
+          console.log("[LOGIN] Step 3b: Decryption successful, importing CryptoKey...");
+          
+          // ========== STEP 4: IMPORT PRIVATE KEYS AS CRYPTOKEYS ==========
           // Import the decrypted private key
           userPrivateKey = await CryptoModule.importPrivateKey(decryptedPrivateKeyBase64);
-          console.log("[LOGIN] Successfully imported private key");
+          console.log("[LOGIN] Step 3c: Successfully imported encryption private key (CryptoKey)");
         } catch (decryptError) {
-          console.error("[LOGIN] Failed to decrypt private key:", decryptError);
+          console.error("[LOGIN] FAILED to decrypt/import encryption private key:", decryptError);
           alert("Incorrect password or corrupted key data");
           localStorage.removeItem("authToken");
           localStorage.removeItem("username");
@@ -183,8 +196,9 @@ async function handleLogin(username, password) {
           return;
         }
       } else {
-        console.error("[LOGIN] No private key data found in IndexedDB for username:", username);
-        alert("Private key not found. Please register again.");
+        console.error("[LOGIN] CRITICAL: No encryption private key found in IndexedDB for username:", username);
+        console.error("[LOGIN] This user has not registered yet, or registration failed to save keys.");
+        alert("Private key not found. Please register first.");
         localStorage.removeItem("authToken");
         localStorage.removeItem("username");
         showAuthScreen();
@@ -194,23 +208,26 @@ async function handleLogin(username, password) {
 
       if (encryptedSigningPrivateKeyData) {
         try {
-          console.log("Parsing and decrypting signing private key...");
+          console.log("[LOGIN] Step 3d: Decrypting signing private key...");
           // Parse encrypted key data and decrypt with password
           const signingKeyData = typeof encryptedSigningPrivateKeyData === 'string'
             ? JSON.parse(encryptedSigningPrivateKeyData)
             : encryptedSigningPrivateKeyData;
+          
           const decryptedSigningPrivateKeyBase64 = await IndexedDBModule.decryptPrivateKeyWithPassword(signingKeyData, password);
-          console.log("Successfully decrypted signing key, importing...");
+          console.log("[LOGIN] Step 3e: Signing key decryption successful, importing...");
+          
           // Import the decrypted signing private key
           userSigningPrivateKey = await CryptoModule.importPrivateKey(decryptedSigningPrivateKeyBase64, 'sign');
-          console.log("Successfully imported signing key");
+          console.log("[LOGIN] Step 3f: Successfully imported signing private key (CryptoKey)");
         } catch (decryptError) {
-          console.warn("Failed to decrypt signing private key:", decryptError);
+          console.warn("[LOGIN] Non-fatal: Failed to decrypt signing private key:", decryptError);
           // Non-fatal - continue without signing key
         }
       }
     } catch (dbError) {
-      console.error("Failed to load private key:", dbError);
+      console.error("[LOGIN] CRITICAL DB ERROR during key loading:", dbError);
+      console.error("[LOGIN] Stack trace:", dbError.stack);
       alert("Failed to load encryption keys: " + dbError.message);
       localStorage.removeItem("authToken");
       localStorage.removeItem("username");
@@ -219,6 +236,8 @@ async function handleLogin(username, password) {
       return;
     }
 
+    // ========== STEP 5: LOAD PUBLIC KEYS FROM SERVER ==========
+    console.log("[LOGIN] Step 4: Loading public keys from server...");
     try {
       const publicKeyResponse = await fetch(
         `${API_BASE_URL}/public_key?username=${encodeURIComponent(currentUsername)}&token=${authToken}`
@@ -227,10 +246,11 @@ async function handleLogin(username, password) {
         const publicKeyData = await publicKeyResponse.json();
         if (publicKeyData.public_key) {
           userPublicKey = await CryptoModule.importPublicKey(publicKeyData.public_key);
+          console.log("[LOGIN] Step 4a: Successfully loaded and imported encryption public key");
         }
       }
     } catch (publicKeyError) {
-      console.warn("Could not load public key after login:", publicKeyError);
+      console.warn("[LOGIN] Non-fatal: Could not load public key after login:", publicKeyError);
     }
 
     try {
@@ -241,17 +261,18 @@ async function handleLogin(username, password) {
         const signatureKeyData = await signaturePublicKeyResponse.json();
         if (signatureKeyData.public_key) {
           userSigningPublicKey = await CryptoModule.importPublicKey(signatureKeyData.public_key, 'signature');
+          console.log("[LOGIN] Step 4b: Successfully loaded and imported signing public key");
         }
       }
     } catch (signatureError) {
-      console.warn("Could not load signature public key after login:", signatureError);
+      console.warn("[LOGIN] Non-fatal: Could not load signature public key after login:", signatureError);
     }
 
     if (!userPublicKey && loginPublicKeyBase64) {
       try {
         userPublicKey = await CryptoModule.importPublicKey(loginPublicKeyBase64);
       } catch (fallbackError) {
-        console.warn("Failed to import derived public key after login:", fallbackError);
+        console.warn("[LOGIN] Failed to import derived public key after login:", fallbackError);
       }
     }
 
@@ -259,10 +280,17 @@ async function handleLogin(username, password) {
       try {
         userSigningPublicKey = await CryptoModule.importPublicKey(loginSignaturePublicKeyBase64, 'signature');
       } catch (fallbackError) {
-        console.warn("Failed to import derived signing public key after login:", fallbackError);
+        console.warn("[LOGIN] Failed to import derived signing public key after login:", fallbackError);
       }
     }
 
+    console.log("[LOGIN] Step 5: Login flow complete!");
+    console.log("[LOGIN] Keys loaded:", {
+      hasPrivateKey: !!userPrivateKey,
+      hasPublicKey: !!userPublicKey,
+      hasSigningPrivateKey: !!userSigningPrivateKey,
+      hasSigningPublicKey: !!userSigningPublicKey
+    });
     document.getElementById("loginUsername").value = "";
     document.getElementById("loginPassword").value = "";
 
@@ -278,6 +306,8 @@ async function handleLogin(username, password) {
 
 async function handleRegister(username, password) {
   try {
+    // ========== INPUT VALIDATION ==========
+    console.log("[REGISTER] Step 1: Validating input...");
     // Input validation
     const usernameValidation = SanitizeModule.validateUsername(username);
     if (!usernameValidation.isValid) {
@@ -290,35 +320,49 @@ async function handleRegister(username, password) {
       alert("Password error: " + passwordValidation.error);
       return;
     }
+    console.log("[REGISTER] Step 1 OK: Input validated");
 
+    // ========== CLEAN UP OLD KEYS (if corrupted) ==========
+    console.log("[REGISTER] Step 2: Checking for old keys...");
     // First, clean up any old corrupted keys if they exist
     try {
-      console.log("Checking for old keys for user:", username);
+      console.log("[REGISTER] Deleting any old/corrupted keys for user:", username);
       await IndexedDBModule.deleteUserKeys(username);
-      console.log("Cleaned up old keys for user:", username);
+      console.log("[REGISTER] Old keys cleaned up");
     } catch (cleanupError) {
-      console.warn("Could not clean old keys (this is OK if user is new):", cleanupError);
+      console.warn("[REGISTER] Could not clean old keys (this is OK if user is new):", cleanupError);
     }
 
+    // ========== KEY GENERATION ==========
+    console.log("[REGISTER] Step 3: Generating new key pairs...");
     // Show loading message
     alert("Generating encryption keys (this may take a few seconds)...");
 
     // Generate RSA-4096 key pair for this user
+    console.log("[REGISTER] Step 3a: Generating RSA-OAEP key pair...");
     const keyPair = await CryptoModule.generateKeyPair();
     userPublicKey = keyPair.publicKey;
     const privateKey = keyPair.privateKey;
+    console.log("[REGISTER] Step 3b: RSA-OAEP key pair generated");
 
     // Generate a separate RSA-PSS key pair for digital signatures
+    console.log("[REGISTER] Step 3c: Generating RSA-PSS signing key pair...");
     const signatureKeyPair = await CryptoModule.generateSignatureKeyPair();
     userSigningPublicKey = signatureKeyPair.publicKey;
     userSigningPrivateKey = signatureKeyPair.privateKey;
+    console.log("[REGISTER] Step 3d: RSA-PSS key pair generated");
 
+    // ========== EXPORT KEYS ==========
+    console.log("[REGISTER] Step 4: Exporting keys for storage...");
     // Export public keys to send to server
     const publicKeyBase64 = await CryptoModule.exportPublicKey(keyPair.publicKey);
     const signaturePublicKeyBase64 = await CryptoModule.exportPublicKey(signatureKeyPair.publicKey);
     const privateKeyBase64 = await CryptoModule.exportPrivateKey(keyPair.privateKey);
     const signingPrivateKeyBase64 = await CryptoModule.exportPrivateKey(signatureKeyPair.privateKey);
+    console.log("[REGISTER] Step 4: Keys exported successfully");
 
+    // ========== SEND REGISTRATION TO SERVER ==========
+    console.log("[REGISTER] Step 5: Sending registration to server...");
     // Send registration request with both encryption and signature public keys
     const response = await fetch(`${API_BASE_URL}/register`, {
       method: "POST",
@@ -333,32 +377,45 @@ async function handleRegister(username, password) {
 
     if (!response.ok) {
       const error = await response.json();
+      console.error("[REGISTER] Server rejected registration:", error);
       alert(`Registration failed: ${error.message}`);
       return;
     }
+    console.log("[REGISTER] Step 5 OK: Server accepted registration");
 
-
+    // ========== ENCRYPT AND STORE PRIVATE KEYS ==========
+    console.log("[REGISTER] Step 6: Encrypting and storing private keys...");
     // Registration successful - store encrypted private keys in IndexedDB
     // The private keys are encrypted with password-derived key (PBKDF2 + AES-GCM)
     // For security, keys are only decrypted after password verification on login
     try {
       // Encrypt private key with user's password
+      console.log("[REGISTER] Step 6a: Encrypting encryption private key with password...");
       const encryptedKeyData = await IndexedDBModule.encryptPrivateKeyWithPassword(
         privateKeyBase64,
         password,
         username
       );
+      console.log("[REGISTER] Step 6b: Encryption private key encrypted, data structure:", {
+        hasEncryptedData: !!encryptedKeyData.encryptedData,
+        hasSalt: !!encryptedKeyData.salt,
+        hasIv: !!encryptedKeyData.iv,
+        encryptedDataLength: encryptedKeyData.encryptedData.length
+      });
 
       // Encrypt signing private key with user's password
+      console.log("[REGISTER] Step 6c: Encrypting signing private key with password...");
       const encryptedSigningKeyData = await IndexedDBModule.encryptPrivateKeyWithPassword(
         signingPrivateKeyBase64,
         password,
         username
       );
+      console.log("[REGISTER] Step 6d: Signing private key encrypted");
 
       // Store encrypted keys in IndexedDB with encryption metadata
       // NOTE: encryptedKeyData and encryptedSigningKeyData are objects, NOT strings
       // They will be converted to JSON by savePrivateKey before storage
+      console.log("[REGISTER] Step 6e: Saving encrypted keys to IndexedDB...");
       await IndexedDBModule.savePrivateKey(
         username,
         encryptedKeyData,
@@ -368,20 +425,27 @@ async function handleRegister(username, password) {
           key_version: 1
         }
       );
+      console.log("[REGISTER] Step 6f: Keys saved to IndexedDB");
 
       // Immediately verify that the key was saved and can be loaded
+      console.log("[REGISTER] Step 6g: Verifying saved keys...");
       const verifyKey = await IndexedDBModule.loadPrivateKey(username);
-      console.log("[POST-REGISTER VERIFY] Username:", username, "Loaded key:", verifyKey);
+      console.log("[REGISTER] Step 6h: Verification result - Key loaded:", !!verifyKey);
+      
       if (!verifyKey) {
+        console.error("[REGISTER] CRITICAL: Private key was NOT saved!");
         alert("ERROR: Private key was NOT saved! Registration failed. Please try again or contact support.");
         return;
       }
+      console.log("[REGISTER] Step 6i: Verification PASSED - Keys persisted successfully");
     } catch (keyStorageError) {
-      console.error('Error storing encrypted keys:', keyStorageError);
+      console.error('[REGISTER] CRITICAL ERROR during key storage:', keyStorageError);
+      console.error('[REGISTER] Stack trace:', keyStorageError.stack);
       alert('Failed to store encryption keys securely');
       return;
     }
 
+    console.log("[REGISTER] Registration COMPLETE!");
     alert("Registration successful! Your encryption keys have been created and stored securely. Please log in.");
     document.getElementById("registerUsername").value = "";
     document.getElementById("registerPassword").value = "";
@@ -393,7 +457,8 @@ async function handleRegister(username, password) {
     document.getElementById("loginTabBtn").click();
 
   } catch (error) {
-    console.error("Register error:", error);
+    console.error("[REGISTER] CRITICAL EXCEPTION:", error);
+    console.error("[REGISTER] Stack trace:", error.stack);
     alert("Registration error: " + error.message);
   }
 }
@@ -683,26 +748,42 @@ function attachEventListeners() {
 function attachLogoutListener() {
   const logoutBtn = document.getElementById("logoutBtn");
   logoutBtn.addEventListener("click", async () => {
-    // Clear private key from memory (security: don't keep in RAM after logout)
-    userPrivateKey = null;
-    userPublicKey = null;
-    userSigningPrivateKey = null;
-    userSigningPublicKey = null;
-    currentChatId = null;
-    groupKeys = {};
+    console.log("[LOGOUT] Starting logout sequence for:", currentUsername);
     
-    // Clear IndexedDB sensitive data
+    // ========== STEP 1: CLEAR IN-MEMORY KEYS ==========
+    // CRITICAL: Clear only RAM references, NOT persistent IndexedDB storage
+    console.log("[LOGOUT] Step 1: Clearing in-memory keys from RAM...");
+    userPrivateKey = null;  // Clear decrypted private key (RAM only)
+    userPublicKey = null;   // Clear public key reference (RAM only)
+    userSigningPrivateKey = null;  // Clear signing private key (RAM only)
+    userSigningPublicKey = null;   // Clear signing public key (RAM only)
+    currentChatId = null;   // Clear current chat session
+    groupKeys = {};         // Clear cached group keys (RAM only)
+    console.log("[LOGOUT] Step 1 OK: In-memory keys cleared");
+    
+    // ========== STEP 2: CLEAR SESSION CACHE (but keep persistent encrypted keys) ==========
+    console.log("[LOGOUT] Step 2: Clearing session cache from IndexedDB...");
+    // Clear IndexedDB session data
+    // IMPORTANT: This only clears temporary session cache, NOT the persistent encrypted private key!
     try {
-      await IndexedDBModule.clearSensitiveData(currentUsername);
+      const username = currentUsername;
+      await IndexedDBModule.clearSensitiveData(username);
+      console.log("[LOGOUT] Step 2 OK: Session cache cleared (encrypted keys PRESERVED)");
     } catch (error) {
-      console.error("Error clearing sensitive data:", error);
+      console.error("[LOGOUT] Error clearing session cache:", error);
+      // Non-fatal - continue with logout
     }
     
+    // ========== STEP 3: CLEAR SESSION STORAGE ==========
+    console.log("[LOGOUT] Step 3: Clearing session tokens...");
     localStorage.removeItem("authToken");
     localStorage.removeItem("username");
     authToken = null;
     currentUsername = null;
     currentChatName = null;
+    console.log("[LOGOUT] Step 3 OK: Session tokens cleared");
+    
+    console.log("[LOGOUT] Logout COMPLETE - User can log in again without re-registering");
     showAuthScreen();
     attachAuthListeners();
   });
