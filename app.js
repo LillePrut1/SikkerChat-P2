@@ -1233,21 +1233,23 @@ async function renderMessages() {
     const messageDiv = document.createElement("div");
     messageDiv.className = "message";
 
-    if (msg.sender === currentUsername) {
+    const senderName = msg.sender || msg.from || "Unknown";
+    if (senderName === currentUsername) {
       messageDiv.classList.add("own");
     }
 
     const senderDiv = document.createElement("div");
     senderDiv.className = "message-sender";
-    senderDiv.textContent = msg.sender;
+    senderDiv.textContent = senderName;
 
     const textDiv = document.createElement("div");
     textDiv.className = "message-text";
 
     // Decrypt message if we have ciphertext and nonce
     let displayText = "[Unable to decrypt message]";
-    const ciphertextValue = msg.ciphertext || msg.text;
-    if (ciphertextValue && msg.nonce && groupKey) {
+    const ciphertextValue = msg.ciphertext || msg.encrypted_message || msg.text;
+    const nonceValue = msg.nonce;
+    if (ciphertextValue && nonceValue && groupKey) {
       try {
         // Decrypt the message using the group key
         const decryptedText = await CryptoModule.decryptMessage(
@@ -1383,6 +1385,7 @@ async function sendMessage(chatName, messageText) {
         temp_token: authToken,
         group_id: currentChatId,
         encrypted_message: ciphertext,  // Encrypted message
+        nonce: nonce,
         signature: signature
       })
     });

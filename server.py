@@ -623,7 +623,7 @@ def get_rooms(username):
         group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
         group_data = load_json(group_file)
         
-        group_name = group_data.get("group_name", group_id)
+        group_name = group_data.get("group_name", group_data.get("name", group_id))
         role = get_user_role_in_group(username, group_id)
         
         groups_list.append({

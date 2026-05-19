@@ -172,7 +172,9 @@ def create_group_routes(app, crypto_routes, config):
             
             # Create group data
             group_data = {
+                "group_id": group_id,
                 "id": group_id,
+                "group_name": group_name,
                 "name": group_name,
                 "creator": username,
                 "created_at": datetime.now().isoformat(),
@@ -665,13 +667,16 @@ def create_group_routes(app, crypto_routes, config):
         # Get encrypted message
         encrypted_message = data.get('encrypted_message')
         
+        # Get nonce for AES-GCM decryption
+        nonce = data.get('nonce')
+        
         # Get signature
         signature = data.get('signature')
         
         # Validate parameters
-        if not group_id or not encrypted_message or not signature:
+        if not group_id or not encrypted_message or not nonce or not signature:
             # Return error
-            return jsonify({"message": "group_id, encrypted_message, and signature required"}), 400
+            return jsonify({"message": "group_id, encrypted_message, nonce, and signature required"}), 400
         
         try:
             # Check if user member of group
@@ -697,6 +702,7 @@ def create_group_routes(app, crypto_routes, config):
                 "id": str(uuid4()),
                 "from": username,
                 "encrypted_message": encrypted_message,
+                "nonce": nonce,
                 "signature": signature,
                 "timestamp": datetime.now().isoformat()
             }
