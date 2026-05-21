@@ -23,6 +23,9 @@ let appState = {
 };
 
 let authListenersAttached = false;
+let messagePollingInterval = null; // Track polling interval for auto-refresh
+let lastMessageCount = 0; // Track message count to detect new messages
+let lastMessageId = null; // Track last message ID to detect changes
 let eventListenersAttached = false;
 let isRegistering = false;
 let isLoggingIn = false;
@@ -49,13 +52,106 @@ function initializeApp() {
   if (savedToken && savedUsername) {
     authToken = savedToken;
     currentUsername = savedUsername;
-    // Note: private key will be loaded during first crypto operation after login
-    showDashboard();
-    loadDashboardData();
-    attachEventListeners();
+    // Session recovered from localStorage - need to restore private keys with password
+    showSessionRecoveryPrompt();
   } else {
     showAuthScreen();
     attachAuthListeners();
+  }
+}
+
+function showSessionRecoveryPrompt() {
+  // Hide dashboard elements but keep auth screen visible
+  const authScreen = document.getElementById("authScreen");
+  const dashboard = document.getElementById("dashboard");
+  
+  authScreen.classList.remove("hidden");
+  dashboard.classList.add("hidden");
+
+  // Create a temporary overlay for password prompt
+  let overlay = document.getElementById("sessionRecoveryOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "sessionRecoveryOverlay";
+    overlay.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;";
+    document.body.appendChild(overlay);
+  }
+
+  overlay.innerHTML = `
+    <div style="background: white; padding: 30px; border-radius: 8px; text-align: center; max-width: 400px;">
+      <h2>Session Recovered</h2>
+      <p>Enter your password to restore your encryption keys:</p>
+      <input type="password" id="sessionPassword" placeholder="Password" style="width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box;">
+      <button id="restoreSessionBtn" style="width: 100%; padding: 10px; margin-top: 10px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px;">Restore Session</button>
+      <button id="logoutSessionBtn" style="width: 100%; padding: 10px; margin-top: 10px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 4px;">Logout</button>
+    </div>
+  `;
+
+  document.getElementById("restoreSessionBtn").addEventListener("click", async () => {
+    const password = document.getElementById("sessionPassword").value.trim();
+    if (!password) {
+      alert("Please enter your password");
+      return;
+    }
+    await restoreSessionWithPassword(password, overlay);
+  });
+
+  document.getElementById("logoutSessionBtn").addEventListener("click", () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("username");
+    authToken = null;
+    currentUsername = null;
+    userPrivateKey = null;
+    userSigningPrivateKey = null;
+    overlay.remove();
+    authListenersAttached = false; // Reset flag to allow re-attaching listeners
+    initializeApp();
+  });
+}
+
+async function restoreSessionWithPassword(password, overlay) {
+  try {
+    // Load and decrypt private keys with password
+    const encryptedPrivateKeyData = await IndexedDBModule.loadPrivateKey(currentUsername);
+    const encryptedSigningPrivateKeyData = await IndexedDBModule.loadSigningPrivateKey(currentUsername);
+
+    if (!encryptedPrivateKeyData) {
+      alert("Private keys not found. Please log in again.");
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("username");
+      authToken = null;
+      currentUsername = null;
+      if (overlay) overlay.remove();
+      authListenersAttached = false;
+      location.reload();
+      return;
+    }
+
+    // Decrypt private keys with password
+    const keyData = typeof encryptedPrivateKeyData === 'string' 
+      ? JSON.parse(encryptedPrivateKeyData) 
+      : encryptedPrivateKeyData;
+    
+    const decryptedPrivateKeyBase64 = await IndexedDBModule.decryptPrivateKeyWithPassword(keyData, password);
+    userPrivateKey = await CryptoModule.importPrivateKey(decryptedPrivateKeyBase64);
+
+    if (encryptedSigningPrivateKeyData) {
+      const signingKeyData = typeof encryptedSigningPrivateKeyData === 'string'
+        ? JSON.parse(encryptedSigningPrivateKeyData)
+        : encryptedSigningPrivateKeyData;
+      
+      const decryptedSigningPrivateKeyBase64 = await IndexedDBModule.decryptPrivateKeyWithPassword(signingKeyData, password);
+      userSigningPrivateKey = await CryptoModule.importPrivateKey(decryptedSigningPrivateKeyBase64, 'sign');
+    }
+
+    // Session restored successfully - remove overlay and show dashboard
+    if (overlay) overlay.remove();
+    showDashboard();
+    loadDashboardData();
+    attachEventListeners();
+  } catch (error) {
+    console.error("Failed to restore session:", error);
+    alert("Incorrect password or failed to restore session");
   }
 }
 
@@ -585,16 +681,8 @@ async function loadGroupKeyForChat(groupName, groupId) {
   }
 
   if (!userPrivateKey) {
-    try {
-      const encryptedPrivateKeyBase64 = await IndexedDBModule.loadPrivateKey(currentUsername);
-      if (!encryptedPrivateKeyBase64) {
-        throw new Error("Private key not found locally");
-      }
-      userPrivateKey = await CryptoModule.importPrivateKey(encryptedPrivateKeyBase64);
-    } catch (keyError) {
-      console.error("Unable to import private key for group decryption:", keyError);
-      return null;
-    }
+    console.error("Private key not loaded. Please log in again.");
+    return null;
   }
 
   try {
@@ -624,6 +712,12 @@ function showDashboard() {
 }
 
 function showControlPanel() {
+  // Stop message polling when leaving chat view
+  if (messagePollingInterval) {
+    clearInterval(messagePollingInterval);
+    messagePollingInterval = null;
+  }
+
   document.getElementById("controlPanel").classList.remove("hidden");
   document.getElementById("chatView").classList.add("hidden");
   document.getElementById("chatView").classList.remove("active");
@@ -883,6 +977,12 @@ function attachLogoutListener() {
   const logoutBtn = document.getElementById("logoutBtn");
   logoutBtn.addEventListener("click", async () => {
     console.log("[LOGOUT] Starting logout sequence for:", currentUsername);
+    
+    // Stop any active message polling
+    if (messagePollingInterval) {
+      clearInterval(messagePollingInterval);
+      messagePollingInterval = null;
+    }
     
     // ========== STEP 1: CLEAR IN-MEMORY KEYS ==========
     // CRITICAL: Clear only RAM references, NOT persistent IndexedDB storage
@@ -1146,7 +1246,12 @@ async function createGroup(groupName, members) {
     alert("Group created!");
     document.getElementById("groupName").value = "";
     document.getElementById("createGroupForm").classList.add("hidden");
-    loadDashboardData();
+    
+    // Wait for dashboard to reload before proceeding
+    await loadDashboardData();
+    
+    // Automatically open the newly created group
+    openChat(groupName, groupId);
 
   } catch (error) {
     console.error("Error creating group:", error);
@@ -1172,6 +1277,16 @@ function chatClickHandler(e) {
 }
 
 function openChat(chatName, groupId) {
+  // Stop existing polling when switching chats
+  if (messagePollingInterval) {
+    clearInterval(messagePollingInterval);
+    messagePollingInterval = null;
+  }
+
+  // Reset message tracking for new chat
+  lastMessageCount = 0;
+  lastMessageId = null;
+
   currentChatName = chatName;
   currentChatId = groupId || groupIdByName[chatName] || null;
   document.querySelectorAll(".chat-item").forEach(item => {
@@ -1185,6 +1300,11 @@ function openChat(chatName, groupId) {
   document.getElementById("chatName").textContent = chatName;
   showChatView();
   loadMessages(chatName);
+
+  // Start polling for new messages every 3 seconds
+  messagePollingInterval = setInterval(() => {
+    loadMessages(chatName);
+  }, 3000);
 }
 
 async function loadMessages(chatName) {
@@ -1200,11 +1320,21 @@ async function loadMessages(chatName) {
     }
 
     const data = await response.json();
-    appState.currentMessages = data.messages || [];
+    const newMessages = data.messages || [];
     
-    // renderMessages is now async due to decryption
-    await renderMessages();
-
+    // Only re-render if messages changed (new message arrived)
+    const newMessageCount = newMessages.length;
+    const currentLastMessageId = newMessages.length > 0 ? newMessages[newMessages.length - 1].id : null;
+    
+    // Check if we have new messages or if existing messages changed
+    if (newMessageCount !== lastMessageCount || currentLastMessageId !== lastMessageId) {
+      appState.currentMessages = newMessages;
+      lastMessageCount = newMessageCount;
+      lastMessageId = currentLastMessageId;
+      
+      // renderMessages is now async due to decryption
+      await renderMessages();
+    }
   } catch (error) {
     console.error("Error loading messages:", error);
   }
@@ -1317,6 +1447,11 @@ function attachMessageListeners() {
       return;
     }
 
+    if (!currentChatId) {
+      alert("Chat ID not found. Please refresh and select the chat again.");
+      return;
+    }
+
     const messageInput = document.getElementById("messageInput");
     const messageText = messageInput.value.trim();
 
@@ -1361,17 +1496,6 @@ async function sendMessage(chatName, messageText) {
 
     // Sign the message ciphertext and nonce so recipients can verify sender authenticity
     let signature = null;
-    if (!userSigningPrivateKey) {
-      try {
-        const signingKeyBase64 = await IndexedDBModule.loadSigningPrivateKey(currentUsername);
-        if (signingKeyBase64) {
-          userSigningPrivateKey = await CryptoModule.importPrivateKey(signingKeyBase64, 'sign');
-        }
-      } catch (signingKeyError) {
-        console.warn('Could not load signing private key:', signingKeyError);
-      }
-    }
-
     if (userSigningPrivateKey) {
       const messageToSign = `${ciphertext}:${nonce}`;
       signature = await CryptoModule.signMessage(messageToSign, userSigningPrivateKey);

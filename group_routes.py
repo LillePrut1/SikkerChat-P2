@@ -357,24 +357,27 @@ def create_group_routes(app, crypto_routes, config):
             # Admin decrypted it with their private key, re-encrypted for new member
             encrypted_group_key = data.get('encrypted_group_key')
             
-            # Validate encrypted group key
-            if encrypted_group_key:
-                # Save encrypted group key for new member
-                group_key_file = os.path.join(
-                    data_config['GROUP_KEYS_DIR'],
-                    f"{group_id}_{new_username}.json"
-                )
-                
-                # Prepare data
-                group_key_data = {
-                    "group_id": group_id,
-                    "username": new_username,
-                    "encrypted_group_key": encrypted_group_key,
-                    "saved_at": datetime.now().isoformat()
-                }
-                
-                # Save group key
-                save_json(group_key_file, group_key_data)
+            # Validate encrypted group key - REQUIRED for new member to access group
+            if not encrypted_group_key:
+                # Return error
+                return jsonify({"message": "encrypted_group_key required to add member"}), 400
+            
+            # Save encrypted group key for new member
+            group_key_file = os.path.join(
+                data_config['GROUP_KEYS_DIR'],
+                f"{group_id}_{new_username}.json"
+            )
+            
+            # Prepare data
+            group_key_data = {
+                "group_id": group_id,
+                "username": new_username,
+                "encrypted_group_key": encrypted_group_key,
+                "saved_at": datetime.now().isoformat()
+            }
+            
+            # Save group key
+            save_json(group_key_file, group_key_data)
             
             # Return success
             return jsonify({
