@@ -849,6 +849,39 @@ async function fetchEncryptedGroupKeyFromServer(groupName, groupId) {
   }
 }
 
+async function fetchAndDecryptGroupKeys(groupName, groupId) {
+  const entries = await fetchEncryptedGroupKeyFromServer(groupName, groupId);
+  const decryptedHistory = [];
+
+  if (!entries) {
+    return decryptedHistory;
+  }
+
+  if (typeof entries === 'string') {
+    try {
+      const decryptedKey = await CryptoModule.decryptGroupKey(entries, userPrivateKey);
+      decryptedHistory.push({ key: decryptedKey, saved_at: new Date().toISOString() });
+    } catch (err) {
+      console.warn("Failed to decrypt single group key entry", err);
+    }
+    return decryptedHistory;
+  }
+
+  if (Array.isArray(entries)) {
+    for (let entry of entries) {
+      if (!entry || !entry.encrypted_group_key) continue;
+      try {
+        const decryptedKey = await CryptoModule.decryptGroupKey(entry.encrypted_group_key, userPrivateKey);
+        decryptedHistory.push({ key: decryptedKey, saved_at: entry.saved_at || new Date().toISOString() });
+      } catch (err) {
+        console.warn("Failed to decrypt group history entry", entry, err);
+      }
+    }
+  }
+
+  return decryptedHistory;
+}
+
 async function loadGroupKeyForChat(groupName, groupId) {
   const resolvedGroupId = groupId || groupIdByName[groupName];
   let currentGroupKey = null;
@@ -1577,7 +1610,20 @@ async function addMemberToGroup(username) {
       return false;
     }
 
-    const encryptedGroupKey = await CryptoModule.encryptGroupKeyForUser(groupKey, memberPublicKey);
+    const decryptedHistory = await fetchAndDecryptGroupKeys(currentChatName, currentChatId);
+    if (decryptedHistory.length === 0) {
+      alert("Unable to load current group key history. Cannot add member safely.");
+      return false;
+    }
+
+    const memberEncryptedKeys = [];
+    for (let entry of decryptedHistory) {
+      const encryptedForMember = await CryptoModule.encryptGroupKeyForUser(entry.key, memberPublicKey);
+      memberEncryptedKeys.push({
+        encrypted_group_key: encryptedForMember,
+        saved_at: entry.saved_at
+      });
+    }
 
     const response = await fetch(`${API_BASE_URL}/group_add_member`, {
       method: "POST",
@@ -1586,7 +1632,7 @@ async function addMemberToGroup(username) {
         temp_token: authToken,
         group_id: currentChatId,
         username: username,
-        encrypted_group_key: encryptedGroupKey
+        member_encrypted_keys: memberEncryptedKeys
       })
     });
 

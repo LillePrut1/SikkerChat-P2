@@ -358,22 +358,19 @@ def create_group_routes(app, crypto_routes, config):
             # Save roles
             save_json(roles_file, roles_data)
             
-            # Get encrypted group key from admin's request
-            # Admin decrypted it with their private key, re-encrypted for new member
+            # Get encrypted group key(s) from admin's request
+            member_encrypted_keys = data.get('member_encrypted_keys')
             encrypted_group_key = data.get('encrypted_group_key')
-            
-            # Validate encrypted group key - REQUIRED for new member to access group
-            if not encrypted_group_key:
-                # Return error
-                return jsonify({"message": "encrypted_group_key required to add member"}), 400
-            
-            # Save encrypted group key for new member
+
+            if (not member_encrypted_keys or not isinstance(member_encrypted_keys, list)) and not encrypted_group_key:
+                return jsonify({"message": "encrypted_group_key or member_encrypted_keys required to add member"}), 400
+
+            # Save encrypted group key(s) for new member
             group_key_file = os.path.join(
                 data_config['GROUP_KEYS_DIR'],
                 f"{group_id}_{new_username}.json"
             )
 
-            # Load existing file and append to keys history
             existing = load_json(group_key_file)
             if not existing or not isinstance(existing, dict):
                 data = {
@@ -386,10 +383,22 @@ def create_group_routes(app, crypto_routes, config):
                 if "keys" not in data or not isinstance(data.get("keys"), list):
                     data["keys"] = []
 
-            data["keys"].append({
-                "encrypted_group_key": encrypted_group_key,
-                "saved_at": datetime.now().isoformat()
-            })
+            if member_encrypted_keys and isinstance(member_encrypted_keys, list):
+                for entry in member_encrypted_keys:
+                    if not entry or not isinstance(entry, dict):
+                        continue
+                    encrypted_key = entry.get('encrypted_group_key')
+                    saved_at = entry.get('saved_at') or datetime.now().isoformat()
+                    if encrypted_key:
+                        data["keys"].append({
+                            "encrypted_group_key": encrypted_key,
+                            "saved_at": saved_at
+                        })
+            elif encrypted_group_key:
+                data["keys"].append({
+                    "encrypted_group_key": encrypted_group_key,
+                    "saved_at": datetime.now().isoformat()
+                })
 
             save_json(group_key_file, data)
             
