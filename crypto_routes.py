@@ -241,17 +241,27 @@ def create_crypto_routes(app, auth_module, config):
                 data_config['GROUP_KEYS_DIR'],
                 f"{group_id}_{username}.json"
             )
-            
-            # Prepare data
-            group_key_data = {
-                "group_id": group_id,
-                "username": username,
+
+            # Load existing structure and append key to history
+            existing = load_json(group_key_file)
+            if not existing or not isinstance(existing, dict):
+                data = {
+                    "group_id": group_id,
+                    "username": username,
+                    "keys": []
+                }
+            else:
+                data = existing
+                if "keys" not in data or not isinstance(data.get("keys"), list):
+                    data["keys"] = []
+
+            data["keys"].append({
                 "encrypted_group_key": encrypted_group_key,
                 "saved_at": datetime.now().isoformat()
-            }
-            
-            # Save group key
-            save_json(group_key_file, group_key_data)
+            })
+
+            # Save group key history
+            save_json(group_key_file, data)
             
             # Return success
             return jsonify({"message": "Group key saved"}), 200
@@ -290,19 +300,30 @@ def create_crypto_routes(app, auth_module, config):
                 data_config['GROUP_KEYS_DIR'],
                 f"{group_id}_{username}.json"
             )
-            
+
             # Check if file exists
             if not os.path.exists(group_key_file):
                 # Return error
                 return jsonify({"message": "Group key not found"}), 404
-            
-            # Load group key
+
+            # Load group key history
             group_key_data = load_json(group_key_file)
-            
-            # Return encrypted group key
+            keys = group_key_data.get('keys', []) if isinstance(group_key_data.get('keys', []), list) else []
+
+            # Include legacy top-level encrypted_group_key if present and not already returned
+            legacy_key = group_key_data.get('encrypted_group_key')
+            if legacy_key:
+                legacy_saved_at = group_key_data.get('saved_at', datetime.now().isoformat())
+                if not any(entry.get('encrypted_group_key') == legacy_key for entry in keys):
+                    keys.insert(0, {
+                        'encrypted_group_key': legacy_key,
+                        'saved_at': legacy_saved_at
+                    })
+
+            # Return list of encrypted group keys (history)
             return jsonify({
                 "group_id": group_key_data.get('group_id'),
-                "encrypted_group_key": group_key_data.get('encrypted_group_key')
+                "keys": keys
             }), 200
         
         except Exception as e:
@@ -310,6 +331,43 @@ def create_crypto_routes(app, auth_module, config):
             print(f"Error loading group key: {str(e)}")
             # Return error
             return jsonify({"message": "Server error"}), 500
+
+    @app.route("/debug/group_keys", methods=["GET"])
+    def debug_group_keys_route():
+        """Dev-only endpoint: return raw stored encrypted keys for a user+group.
+        Use only for local debugging. Requires valid token.
+        Query params: group_id, username
+        """
+        # Simple opt-in: allow if DEV_DEBUG_KEYS env var set to true, otherwise restrict to local dev
+        import os
+        allow = os.environ.get('DEV_DEBUG_KEYS', 'true').lower() == 'true'
+        if not allow:
+            return jsonify({"message": "Debug endpoint disabled"}), 403
+
+        token = request.args.get('token')
+        requester = validate_token(token)
+        if not requester:
+            return jsonify({"message": "Invalid or missing token"}), 401
+
+        group_id = request.args.get('group_id')
+        target_username = request.args.get('username')
+        if not group_id or not target_username:
+            return jsonify({"message": "group_id and username required"}), 400
+
+        # Only allow if requester is the same user or a group admin
+        # Load roles to check admin
+        roles_file = os.path.join(data_config['ROLES_DIR'], f"{group_id}_roles.json")
+        roles = load_json(roles_file)
+        is_admin = roles.get(requester) == 'admin'
+        if requester != target_username and not is_admin:
+            return jsonify({"message": "Access denied"}), 403
+
+        group_key_file = os.path.join(data_config['GROUP_KEYS_DIR'], f"{group_id}_{target_username}.json")
+        if not os.path.exists(group_key_file):
+            return jsonify({"message": "Group key file not found"}), 404
+
+        data = load_json(group_key_file)
+        return jsonify({"file": data}), 200
 
     @app.route("/group_key_delete", methods=["POST"])
     def delete_group_key_route():

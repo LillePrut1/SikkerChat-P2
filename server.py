@@ -39,6 +39,56 @@ def initialize_directories():
 
 initialize_directories()
 
+
+def migrate_group_keys_to_history():
+    """Migrate existing group key files using top-level `encrypted_group_key` into the new `keys` array format.
+    This is idempotent and safe to run on every startup.
+    """
+    try:
+        if not os.path.exists(GROUP_KEYS_DIR):
+            return
+
+        for fname in os.listdir(GROUP_KEYS_DIR):
+            if not fname.endswith('.json'):
+                continue
+            path = os.path.join(GROUP_KEYS_DIR, fname)
+            try:
+                with open(path, 'r') as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+
+            # If file already contains `keys` array, skip
+            if isinstance(data, dict) and isinstance(data.get('keys'), list):
+                continue
+
+            # If file contains legacy encrypted_group_key at top level, migrate
+            if isinstance(data, dict) and data.get('encrypted_group_key'):
+                encrypted = data.get('encrypted_group_key')
+                saved_at = data.get('saved_at') or datetime.now().isoformat()
+                migrated = {
+                    'group_id': data.get('group_id'),
+                    'username': data.get('username'),
+                    'keys': [
+                        {
+                            'encrypted_group_key': encrypted,
+                            'saved_at': saved_at
+                        }
+                    ]
+                }
+                # Overwrite file with migrated structure
+                try:
+                    with open(path, 'w') as f:
+                        json.dump(migrated, f, indent=2)
+                except Exception as e:
+                    print(f"Failed to migrate {path}: {e}")
+    except Exception as e:
+        print(f"Error during group key migration: {e}")
+
+
+# Perform migration at startup to ensure consistent key file format
+migrate_group_keys_to_history()
+
 # ========== CONFIGURE AUTH MODULE ==========
 # Pass data directory paths to auth module for file operations
 auth.set_users_file(USERS_FILE)
@@ -138,19 +188,33 @@ def save_users(users):
 def save_group_key(group_id, username, encrypted_group_key):
     """Save encrypted group key for a specific user and group"""
     group_key_file = os.path.join(GROUP_KEYS_DIR, f"{group_id}_{username}.json")
-    save_json(group_key_file, {
-        "group_id": group_id,
-        "username": username,
+    # Maintain history of keys for this user+group
+    existing = load_json(group_key_file)
+    if not existing or not isinstance(existing, dict):
+        data = {
+            "group_id": group_id,
+            "username": username,
+            "keys": []
+        }
+    else:
+        data = existing
+        if "keys" not in data or not isinstance(data.get("keys"), list):
+            data["keys"] = []
+
+    data["keys"].append({
         "encrypted_group_key": encrypted_group_key,
-        "created_at": datetime.now().isoformat()
+        "saved_at": datetime.now().isoformat()
     })
+
+    save_json(group_key_file, data)
 
 
 def load_group_key(group_id, username):
     """Load encrypted group key for a specific user and group"""
     group_key_file = os.path.join(GROUP_KEYS_DIR, f"{group_id}_{username}.json")
     data = load_json(group_key_file)
-    return data.get("encrypted_group_key")
+    # Return list of keys (may be empty)
+    return data.get("keys", [])
 
 
 def get_user_from_token(token):

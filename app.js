@@ -12,6 +12,8 @@ let userSigningPrivateKey = null; // RSA signing private key
 let userSigningPublicKey = null; // RSA signing public key
 let groupKeys = {}; // Cache of decrypted group keys: { groupName: CryptoKey }
 let groupIdByName = {}; // Map group name -> group id for key resolution
+let currentGroupInfo = null; // Latest group metadata for the opened chat
+let groupKeysHistory = {}; // Cache of decrypted historical keys: { groupName: [CryptoKey] }
 let dbReady = false; // Flag to track IndexedDB initialization
 
 let appState = {
@@ -60,6 +62,172 @@ function initializeApp() {
   }
 }
 
+function clearAuthState(clearPersistent = false) {
+  currentUsername = null;
+  authToken = null;
+  currentChatId = null;
+  currentChatName = null;
+  currentGroupInfo = null;
+  userPrivateKey = null;
+  userPublicKey = null;
+  userSigningPrivateKey = null;
+  userSigningPublicKey = null;
+  groupKeys = {};
+  groupKeysHistory = {};
+
+  if (clearPersistent) {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("username");
+  }
+}
+
+function showMissingKeysPrompt(username) {
+  // Create overlay to inform user that local private keys are missing
+  let overlay = document.getElementById("missingKeysOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "missingKeysOverlay";
+    overlay.style.cssText = "position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 10000;";
+    document.body.appendChild(overlay);
+  }
+
+  overlay.innerHTML = `
+    <div style="background: white; padding: 20px; border-radius: 8px; width: 420px; text-align: left;">
+      <h3 style="margin-top:0">No local private keys found</h3>
+      <p>The browser does not have your encrypted private keys for <strong>${username}</strong>. Without them you cannot decrypt messages.</p>
+      <p>You can either import a backup of your encrypted private key, or continue without keys (read-only experience).</p>
+      <div style="margin-top:12px;">
+        <input type="file" id="importKeyFileInput" accept="application/json" />
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button id="importKeyBtn" class="btn btn-primary">Import keys</button>
+        <button id="continueNoKeysBtn" class="btn">Continue without keys</button>
+        <button id="cancelImportBtn" class="btn">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("importKeyBtn").addEventListener("click", async () => {
+    const fileInput = document.getElementById("importKeyFileInput");
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+      alert("Please select a key file to import (JSON)");
+      return;
+    }
+    const file = fileInput.files[0];
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const keyPayload = parsed.private_key || parsed.encrypted_private_key || parsed;
+      const signingKeyPayload = parsed.signing_private_key || parsed.encrypted_signing_private_key || null;
+
+      if (!keyPayload || !keyPayload.encryptedData || !keyPayload.salt || !keyPayload.iv) {
+        throw new Error('Imported file does not contain a valid encrypted private key payload.');
+      }
+
+      await IndexedDBModule.savePrivateKey(username, keyPayload, signingKeyPayload);
+      alert("Imported key file. Please log in again to restore your session.");
+      overlay.remove();
+      const loginInput = document.getElementById("loginUsername");
+      if (loginInput) loginInput.focus();
+    } catch (err) {
+      console.error("Failed to import key file:", err);
+      alert("Failed to import key file: " + err.message);
+    }
+  });
+
+  document.getElementById("continueNoKeysBtn").addEventListener("click", async () => {
+    // Proceed to dashboard without locally stored keys
+    overlay.remove();
+    setAuthStatus("Logged in without local keys. Messages cannot be decrypted.", "warning");
+    showDashboard();
+    await loadDashboardData();
+    attachEventListeners();
+  });
+
+  document.getElementById("cancelImportBtn").addEventListener("click", () => {
+    overlay.remove();
+    // Return to auth screen
+    clearAuthState(true);
+    showAuthScreen();
+    attachAuthListeners();
+  });
+}
+
+function downloadEncryptedKeys(username) {
+  return IndexedDBModule.loadPrivateKey(username).then((keyData) => {
+    if (!keyData) {
+      throw new Error('No encrypted keys found for ' + username);
+    }
+    const signingKeyDataPromise = IndexedDBModule.loadSigningPrivateKey(username).catch(() => null);
+    return signingKeyDataPromise.then((signingKeyData) => {
+      const payload = {
+        username: username,
+        private_key: typeof keyData === 'string' ? JSON.parse(keyData) : keyData,
+        signing_private_key: signingKeyData ? (typeof signingKeyData === 'string' ? JSON.parse(signingKeyData) : signingKeyData) : null,
+        exported_at: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${username}_sikkerchat_keys.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      return payload;
+    });
+  });
+}
+
+function promptDownloadKeysOverlay(encryptedKeyData, encryptedSigningKeyData, username, mandatory = false) {
+  return new Promise((resolve) => {
+    let overlay = document.getElementById('downloadKeysOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'downloadKeysOverlay';
+      overlay.style.cssText = 'position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:10000;';
+      document.body.appendChild(overlay);
+    }
+
+    overlay.innerHTML = `
+      <div style="background:white; padding:20px; border-radius:8px; width:480px; text-align:left;">
+        <h3 style="margin-top:0">Download your encrypted private keys</h3>
+        <p>Please download and securely back up your encrypted private keys now. This backup allows you to restore your account on other devices.</p>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button id="overlayDownloadBtn" class="btn btn-primary">Download Keys</button>
+          <button id="overlayConfirmBtn" class="btn btn-primary">I have downloaded (Continue)</button>
+          <button id="overlayCancelBtn" class="btn">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('overlayDownloadBtn').addEventListener('click', async () => {
+      try {
+        await downloadEncryptedKeys(username);
+        setAuthStatus('Keys downloaded to your device.', 'success');
+      } catch (err) {
+        console.error('Download failed:', err);
+        alert('Failed to download keys: ' + err.message);
+      }
+    });
+
+    document.getElementById('overlayConfirmBtn').addEventListener('click', () => {
+      overlay.remove();
+      resolve(true);
+    });
+
+    document.getElementById('overlayCancelBtn').addEventListener('click', () => {
+      overlay.remove();
+      resolve(false);
+    });
+
+    if (!mandatory) {
+      // non-mandatory: user may close overlay anytime; resolve false by default
+    }
+  });
+}
+
 function showSessionRecoveryPrompt() {
   // Hide dashboard elements but keep auth screen visible
   const authScreen = document.getElementById("authScreen");
@@ -83,7 +251,7 @@ function showSessionRecoveryPrompt() {
       <p>Enter your password to restore your encryption keys:</p>
       <input type="password" id="sessionPassword" placeholder="Password" style="width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box;">
       <button id="restoreSessionBtn" style="width: 100%; padding: 10px; margin-top: 10px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px;">Restore Session</button>
-      <button id="logoutSessionBtn" style="width: 100%; padding: 10px; margin-top: 10px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 4px;">Logout</button>
+      <button id="switchAccountBtn" style="width: 100%; padding: 10px; margin-top: 10px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 4px;">Use another account</button>
     </div>
   `;
 
@@ -96,16 +264,30 @@ function showSessionRecoveryPrompt() {
     await restoreSessionWithPassword(password, overlay);
   });
 
-  document.getElementById("logoutSessionBtn").addEventListener("click", () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("username");
-    authToken = null;
-    currentUsername = null;
-    userPrivateKey = null;
-    userSigningPrivateKey = null;
+  document.getElementById("switchAccountBtn").addEventListener("click", async () => {
+    // Clear any sensitive session cache for the previous user before switching
+    const prevUser = currentUsername;
+    if (prevUser) {
+      try {
+        await IndexedDBModule.clearSensitiveData(prevUser);
+      } catch (err) {
+        console.warn("Failed to clear session cache for previous user:", err);
+      }
+    }
+
+    clearAuthState(true);
     overlay.remove();
-    authListenersAttached = false; // Reset flag to allow re-attaching listeners
-    initializeApp();
+    // Ensure auth listeners will be attached fresh
+    authListenersAttached = false;
+    showAuthScreen();
+    attachAuthListeners();
+
+    // Reset login form fields and focus username input for convenience
+    const loginInput = document.getElementById("loginUsername");
+    const passInput = document.getElementById("loginPassword");
+    if (loginInput) loginInput.value = "";
+    if (passInput) passInput.value = "";
+    if (loginInput) loginInput.focus();
   });
 }
 
@@ -116,14 +298,9 @@ async function restoreSessionWithPassword(password, overlay) {
     const encryptedSigningPrivateKeyData = await IndexedDBModule.loadSigningPrivateKey(currentUsername);
 
     if (!encryptedPrivateKeyData) {
-      alert("Private keys not found. Please log in again.");
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("username");
-      authToken = null;
-      currentUsername = null;
-      if (overlay) overlay.remove();
-      authListenersAttached = false;
-      location.reload();
+      console.warn("[LOGIN] No encryption private key found in IndexedDB for username:", username);
+      // Don't destroy the session token — show user options to import keys or continue without keys
+      showMissingKeysPrompt(username);
       return;
     }
 
@@ -236,6 +413,8 @@ async function handleLogin(username, password) {
   if (isLoggingIn) {
     return;
   }
+
+  clearAuthState(true);
   isLoggingIn = true;
   loginBtn.disabled = true;
 
@@ -339,13 +518,10 @@ async function handleLogin(username, password) {
         }
       } else {
         console.error("[LOGIN] CRITICAL: No encryption private key found in IndexedDB for username:", username);
-        console.error("[LOGIN] This user has not registered yet, or registration failed to save keys.");
-        setAuthStatus("Private key not found. Please register first.", "error");
-        localStorage.removeItem("authToken");
-        localStorage.removeItem("username");
-        showAuthScreen();
-        attachAuthListeners();
-        return;
+          console.warn("[LOGIN] No encryption private key found in IndexedDB for username:", username);
+          // Don't destroy the session token — show user options to import keys or continue without keys
+          showMissingKeysPrompt(username);
+          return;
       }
 
       if (encryptedSigningPrivateKeyData) {
@@ -600,6 +776,12 @@ async function handleRegister(username, password) {
         return;
       }
       console.log("[REGISTER] Step 6i: Verification PASSED - Keys persisted successfully");
+      // Prompt user to download keys (mandatory during registration)
+      const confirmDownloaded = await promptDownloadKeysOverlay(encryptedKeyData, encryptedSigningKeyData, username, true);
+      if (!confirmDownloaded) {
+        setAuthStatus("Registration requires you to download your encrypted private keys.", "error");
+        return;
+      }
     } catch (keyStorageError) {
       console.error('[REGISTER] CRITICAL ERROR during key storage:', keyStorageError);
       console.error('[REGISTER] Stack trace:', keyStorageError.stack);
@@ -655,8 +837,12 @@ async function fetchEncryptedGroupKeyFromServer(groupName, groupId) {
     if (!response.ok) {
       return null;
     }
-    const data = await response.json();
-    return data.encrypted_group_key || null;
+      const data = await response.json();
+      // If server returns a history of keys, pass that through
+      if (data.keys && Array.isArray(data.keys)) {
+        return data.keys; // array of { encrypted_group_key, saved_at }
+      }
+      return data.encrypted_group_key || null;
   } catch (error) {
     console.error("Failed to fetch encrypted group key from server:", error);
     return null;
@@ -665,28 +851,111 @@ async function fetchEncryptedGroupKeyFromServer(groupName, groupId) {
 
 async function loadGroupKeyForChat(groupName, groupId) {
   const resolvedGroupId = groupId || groupIdByName[groupName];
+  let currentGroupKey = null;
 
   // Try raw AES key first
   if (resolvedGroupId) {
     const rawKeyBase64 = await IndexedDBModule.loadGroupKey(resolvedGroupId);
     if (rawKeyBase64) {
-      return await CryptoModule.importGroupKey(rawKeyBase64);
+      try {
+        currentGroupKey = await CryptoModule.importGroupKey(rawKeyBase64);
+      } catch (e) {
+        console.warn("Failed to import local raw group key, falling back to server history", e);
+        currentGroupKey = null;
+      }
     }
   }
 
-  // Fallback: fetch encrypted group key from server and decrypt with private key
-  const encryptedKeyBase64 = await fetchEncryptedGroupKeyFromServer(groupName, resolvedGroupId);
-  if (!encryptedKeyBase64) {
-    return null;
+  // Fetch encrypted group key history from server if possible.
+  // Even when we have a local current key, we need historical keys for older messages.
+  const fetched = await fetchEncryptedGroupKeyFromServer(groupName, resolvedGroupId);
+  if (Array.isArray(fetched)) {
+    groupKeysHistory[groupName] = groupKeysHistory[groupName] || [];
+    for (let entry of fetched) {
+      try {
+        const decrypted = await CryptoModule.decryptGroupKey(entry.encrypted_group_key, userPrivateKey);
+        const exists = groupKeysHistory[groupName].some(k => k.kid === entry.saved_at || k.encrypted === entry.encrypted_group_key);
+        if (!exists) {
+          decrypted.kid = entry.saved_at;
+          decrypted.encrypted = entry.encrypted_group_key;
+          groupKeysHistory[groupName].push(decrypted);
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+
+    if (!currentGroupKey && groupKeysHistory[groupName].length > 0) {
+      const latest = groupKeysHistory[groupName][groupKeysHistory[groupName].length - 1];
+      if (resolvedGroupId) {
+        const rawKeyBase64 = await CryptoModule.exportGroupKey(latest);
+        await IndexedDBModule.saveGroupKey(resolvedGroupId, rawKeyBase64);
+      }
+      return latest;
+    }
   }
+
+  if (!currentGroupKey) {
+    // Fallback: fetch encrypted group key from server and decrypt with private key
+    if (!fetched) {
+      return null;
+    }
+
+    try {
+      const decryptedGroupKey = await CryptoModule.decryptGroupKey(fetched, userPrivateKey);
+      if (resolvedGroupId) {
+        const rawKeyBase64 = await CryptoModule.exportGroupKey(decryptedGroupKey);
+        await IndexedDBModule.saveGroupKey(resolvedGroupId, rawKeyBase64);
+      }
+      return decryptedGroupKey;
+    } catch (decryptError) {
+      console.error("Failed to decrypt group key from server:", decryptError);
+      return null;
+    }
+  }
+
+  return currentGroupKey;
 
   if (!userPrivateKey) {
     console.error("Private key not loaded. Please log in again.");
     return null;
   }
 
+  // If server returned an array of keys, try to decrypt each and cache them
+  if (Array.isArray(fetched)) {
+    groupKeysHistory[groupName] = groupKeysHistory[groupName] || [];
+    for (let entry of fetched) {
+      try {
+        const decrypted = await CryptoModule.decryptGroupKey(entry.encrypted_group_key, userPrivateKey);
+        // store decrypted key in history cache (avoid duplicates)
+        const exists = groupKeysHistory[groupName].some(k => k.kid === entry.saved_at);
+        if (!exists) {
+          // attach a simple id to track the saved_at
+          decrypted.kid = entry.saved_at;
+          groupKeysHistory[groupName].push(decrypted);
+        }
+      } catch (e) {
+        // ignore keys we can't decrypt (not intended for this user)
+        continue;
+      }
+    }
+
+    // Prefer latest decrypted key as active group key
+    if (groupKeysHistory[groupName].length > 0) {
+      const latest = groupKeysHistory[groupName][groupKeysHistory[groupName].length - 1];
+      if (resolvedGroupId) {
+        const rawKeyBase64 = await CryptoModule.exportGroupKey(latest);
+        await IndexedDBModule.saveGroupKey(resolvedGroupId, rawKeyBase64);
+      }
+      return latest;
+    }
+
+    return null;
+  }
+
+  // Single key path (legacy)
   try {
-    const decryptedGroupKey = await CryptoModule.decryptGroupKey(encryptedKeyBase64, userPrivateKey);
+    const decryptedGroupKey = await CryptoModule.decryptGroupKey(fetched, userPrivateKey);
     if (resolvedGroupId) {
       const rawKeyBase64 = await CryptoModule.exportGroupKey(decryptedGroupKey);
       await IndexedDBModule.saveGroupKey(resolvedGroupId, rawKeyBase64);
@@ -916,8 +1185,28 @@ function attachEventListeners() {
   attachMessageListeners();
   attachLeaveGroupListener();
   attachDeleteGroupListener();
+  attachGroupManagementListeners();
   attachBackButtonListener();
+  attachDownloadKeysListener();
   eventListenersAttached = true;
+}
+
+function attachDownloadKeysListener() {
+  const btn = document.getElementById('downloadKeysBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!currentUsername) {
+      alert('No user logged in');
+      return;
+    }
+    try {
+      await downloadEncryptedKeys(currentUsername);
+      alert('Encrypted keys downloaded to your device');
+    } catch (err) {
+      console.error('Failed to download keys:', err);
+      alert('Failed to download keys: ' + err.message);
+    }
+  });
 }
 
 function setAuthStatus(message, type = "info") {
@@ -1015,6 +1304,7 @@ function attachLogoutListener() {
     authToken = null;
     currentUsername = null;
     currentChatName = null;
+    currentGroupInfo = null;
     console.log("[LOGOUT] Step 3 OK: Session tokens cleared");
     
     console.log("[LOGOUT] Logout COMPLETE - User can log in again without re-registering");
@@ -1125,6 +1415,315 @@ function populateFriendCheckboxes() {
       <span>${friend}</span>
     `;
     groupMembers.appendChild(label);
+  }
+}
+
+async function fetchGroupInfo(groupId) {
+  if (!groupId) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/group_info?group_id=${encodeURIComponent(groupId)}&token=${authToken}`
+    );
+    if (!response.ok) {
+      console.warn("Failed to fetch group info", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error fetching group info:", error);
+    return null;
+  }
+}
+
+function updateGroupActionButtons() {
+  const addMemberBtn = document.getElementById("addMemberBtn");
+  const removeMemberBtn = document.getElementById("removeMemberBtn");
+
+  if (!addMemberBtn || !removeMemberBtn) {
+    console.warn("Member management buttons not found in DOM");
+    return;
+  }
+
+  if (!currentGroupInfo || currentGroupInfo.role !== "admin") {
+    addMemberBtn.classList.add("hidden");
+    removeMemberBtn.classList.add("hidden");
+    return;
+  }
+
+  addMemberBtn.classList.remove("hidden");
+  removeMemberBtn.classList.remove("hidden");
+}
+
+function showModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  modal.classList.remove("hidden");
+}
+
+function hideModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  modal.classList.add("hidden");
+}
+
+async function openAddMemberModal() {
+  if (!currentChatId) {
+    alert("Please select a group first.");
+    return;
+  }
+
+  if (!currentGroupInfo) {
+    currentGroupInfo = await fetchGroupInfo(currentChatId);
+  }
+
+  populateAddMemberModal();
+  document.getElementById("addMemberUsernameInput").value = "";
+  showModal("addMemberModal");
+}
+
+function populateAddMemberModal() {
+  const container = document.getElementById("addMemberOptions");
+  container.innerHTML = "";
+
+  if (!currentGroupInfo) {
+    container.innerHTML = '<p class="empty-state">Unable to load group members.</p>';
+    return;
+  }
+
+  const availableFriends = appState.friends.filter(friend => {
+    return friend !== currentUsername && !currentGroupInfo.members.includes(friend);
+  });
+
+  if (availableFriends.length === 0) {
+    container.innerHTML = '<p class="empty-state">No friends available to add. You can enter a username below.</p>';
+  } else {
+    for (let friend of availableFriends) {
+      const label = document.createElement("label");
+      label.className = "radio-label";
+      label.innerHTML = `
+        <input type="radio" name="addMemberUser" value="${friend}" />
+        <span>${friend}</span>
+      `;
+      container.appendChild(label);
+    }
+  }
+}
+
+async function openRemoveMemberModal() {
+  if (!currentChatId) {
+    alert("Please select a group first.");
+    return;
+  }
+
+  if (!currentGroupInfo) {
+    currentGroupInfo = await fetchGroupInfo(currentChatId);
+  }
+
+  populateRemoveMemberModal();
+  showModal("removeMemberModal");
+}
+
+function populateRemoveMemberModal() {
+  const container = document.getElementById("removeMemberOptions");
+  container.innerHTML = "";
+
+  if (!currentGroupInfo) {
+    container.innerHTML = '<p class="empty-state">Unable to load group members.</p>';
+    return;
+  }
+
+  const removableMembers = currentGroupInfo.members.filter(member => member !== currentUsername);
+  if (removableMembers.length === 0) {
+    container.innerHTML = '<p class="empty-state">No other members to remove.</p>';
+    return;
+  }
+
+  for (let member of removableMembers) {
+    const label = document.createElement("label");
+    label.className = "radio-label";
+    label.innerHTML = `
+      <input type="radio" name="removeMemberUser" value="${member}" />
+      <span>${member}</span>
+    `;
+    container.appendChild(label);
+  }
+}
+
+async function addMemberToGroup(username) {
+  if (!currentChatId || !currentChatName) {
+    alert("Please select a group first.");
+    return false;
+  }
+
+  try {
+    let groupKey = groupKeys[currentChatName];
+    if (!groupKey) {
+      groupKey = await loadGroupKeyForChat(currentChatName, currentChatId);
+      if (!groupKey) {
+        alert("Unable to load current group key.");
+        return false;
+      }
+      groupKeys[currentChatName] = groupKey;
+    }
+
+    const memberPublicKey = await fetchUserPublicKey(username);
+    if (!memberPublicKey) {
+      alert(`Unable to load public key for ${username}.`);
+      return false;
+    }
+
+    const encryptedGroupKey = await CryptoModule.encryptGroupKeyForUser(groupKey, memberPublicKey);
+
+    const response = await fetch(`${API_BASE_URL}/group_add_member`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        temp_token: authToken,
+        group_id: currentChatId,
+        username: username,
+        encrypted_group_key: encryptedGroupKey
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      alert(`Error adding member: ${error.message}`);
+      return false;
+    }
+
+    alert(`${username} added to group.`);
+    currentGroupInfo = await fetchGroupInfo(currentChatId);
+    updateGroupActionButtons();
+    return true;
+  } catch (error) {
+    console.error("Error adding member:", error);
+    alert("Error adding member to group.");
+    return false;
+  }
+}
+
+async function removeGroupMember(username) {
+  if (!currentChatId || !currentChatName) {
+    alert("Please select a group first.");
+    return false;
+  }
+
+  if (!currentGroupInfo) {
+    currentGroupInfo = await fetchGroupInfo(currentChatId);
+  }
+
+  const remainingMembers = currentGroupInfo.members.filter(member => member !== username);
+  if (remainingMembers.length === 0) {
+    alert("Cannot remove the last member from the group.");
+    return false;
+  }
+
+  try {
+    const newGroupKey = await CryptoModule.generateGroupKey();
+    const memberEncryptedKeys = {};
+
+    for (let member of remainingMembers) {
+      const publicKey = await fetchUserPublicKey(member);
+      if (!publicKey) {
+        alert(`Unable to load public key for ${member}. Removal aborted.`);
+        return false;
+      }
+      const encryptedKey = await CryptoModule.encryptGroupKeyForUser(newGroupKey, publicKey);
+      memberEncryptedKeys[member] = encryptedKey;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/group_remove_member`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        temp_token: authToken,
+        group_id: currentChatId,
+        username: username,
+        member_encrypted_keys: memberEncryptedKeys
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      alert(`Error removing member: ${error.message}`);
+      return false;
+    }
+
+    const rawKeyBase64 = await CryptoModule.exportGroupKey(newGroupKey);
+    groupKeys[currentChatName] = newGroupKey;
+    await IndexedDBModule.saveGroupKey(currentChatId, rawKeyBase64);
+
+    alert(`${username} removed from group and group key rotated.`);
+    currentGroupInfo = await fetchGroupInfo(currentChatId);
+    updateGroupActionButtons();
+    await loadMessages(currentChatName);
+    return true;
+  } catch (error) {
+    console.error("Error removing member:", error);
+    alert("Error removing member from group.");
+    return false;
+  }
+}
+
+async function attachGroupManagementListeners() {
+  const addMemberBtn = document.getElementById("addMemberBtn");
+  const removeMemberBtn = document.getElementById("removeMemberBtn");
+  const cancelAddMemberBtn = document.getElementById("cancelAddMemberBtn");
+  const cancelRemoveMemberBtn = document.getElementById("cancelRemoveMemberBtn");
+  const confirmAddMemberBtn = document.getElementById("confirmAddMemberBtn");
+  const confirmRemoveMemberBtn = document.getElementById("confirmRemoveMemberBtn");
+
+  if (addMemberBtn) {
+    addMemberBtn.addEventListener("click", openAddMemberModal);
+  }
+  if (removeMemberBtn) {
+    removeMemberBtn.addEventListener("click", openRemoveMemberModal);
+  }
+  if (cancelAddMemberBtn) {
+    cancelAddMemberBtn.addEventListener("click", () => hideModal("addMemberModal"));
+  }
+  if (cancelRemoveMemberBtn) {
+    cancelRemoveMemberBtn.addEventListener("click", () => hideModal("removeMemberModal"));
+  }
+  if (confirmAddMemberBtn) {
+    confirmAddMemberBtn.addEventListener("click", async () => {
+      const selectedRadio = document.querySelector("input[name='addMemberUser']:checked");
+      const typedUsername = document.getElementById("addMemberUsernameInput").value.trim();
+      const username = selectedRadio ? selectedRadio.value : typedUsername;
+
+      if (!username) {
+        alert("Select or type a username to add.");
+        return;
+      }
+
+      const added = await addMemberToGroup(username);
+      if (added) {
+        hideModal("addMemberModal");
+      }
+    });
+  }
+  if (confirmRemoveMemberBtn) {
+    confirmRemoveMemberBtn.addEventListener("click", async () => {
+      const selectedRadio = document.querySelector("input[name='removeMemberUser']:checked");
+      if (!selectedRadio) {
+        alert("Select a member to remove.");
+        return;
+      }
+
+      const username = selectedRadio.value;
+      const confirmed = confirm(`Remove ${username} from ${currentChatName}? This will rotate the group key.`);
+      if (!confirmed) return;
+
+      const removed = await removeGroupMember(username);
+      if (removed) {
+        hideModal("removeMemberModal");
+      }
+    });
   }
 }
 
@@ -1276,7 +1875,7 @@ function chatClickHandler(e) {
   }
 }
 
-function openChat(chatName, groupId) {
+async function openChat(chatName, groupId) {
   // Stop existing polling when switching chats
   if (messagePollingInterval) {
     clearInterval(messagePollingInterval);
@@ -1289,6 +1888,7 @@ function openChat(chatName, groupId) {
 
   currentChatName = chatName;
   currentChatId = groupId || groupIdByName[chatName] || null;
+  currentGroupInfo = null;
   document.querySelectorAll(".chat-item").forEach(item => {
     item.classList.remove("active");
   });
@@ -1299,11 +1899,16 @@ function openChat(chatName, groupId) {
 
   document.getElementById("chatName").textContent = chatName;
   showChatView();
-  loadMessages(chatName);
+
+  // Load group metadata so add/remove buttons are correctly enabled
+  currentGroupInfo = await fetchGroupInfo(currentChatId);
+  updateGroupActionButtons();
+
+  await loadMessages(chatName);
 
   // Start polling for new messages every 3 seconds
-  messagePollingInterval = setInterval(() => {
-    loadMessages(chatName);
+  messagePollingInterval = setInterval(async () => {
+    await loadMessages(chatName);
   }, 3000);
 }
 
@@ -1382,13 +1987,26 @@ async function renderMessages() {
     if (ciphertextValue && nonceValue && groupKey) {
       try {
         // Decrypt the message using the group key
-        const decryptedText = await CryptoModule.decryptMessage(
-          ciphertextValue,
-          msg.nonce,
-          groupKey
-        );
-
-        displayText = decryptedText;
+        let decryptedText = null;
+        try {
+          decryptedText = await CryptoModule.decryptMessage(ciphertextValue, msg.nonce, groupKey);
+        } catch (primaryDecryptErr) {
+          // Try historical keys if available
+          const history = groupKeysHistory[currentChatName] || [];
+          for (let histKey of history) {
+            try {
+              decryptedText = await CryptoModule.decryptMessage(ciphertextValue, msg.nonce, histKey);
+              if (decryptedText) break;
+            } catch (e) {
+              continue;
+            }
+          }
+        }
+        if (decryptedText) {
+          displayText = decryptedText;
+        } else {
+          displayText = "[Decryption failed]";
+        }
 
         if (msg.signature) {
           try {

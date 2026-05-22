@@ -1,6 +1,10 @@
 {
   "group_id": "f48dcba3-0954-4835-ac24-50600b1cba7e",
   "username": "nick3",
-  "encrypted_group_key": "ivRuteetfQQbHjofK/VoY1JRWBuFZO/y8U4OEXnOxD4RwgON9cpe02tm8us/f4J5102Q7biwJ5liKhbhe01yR2eptHISvgC3vn77oojzsGkYqwCbM0RwZBkL5wEkQcnbcCRHoZM7Qa0a3kZjQeJnsNeMB3mlWBryj4nSt8vMm/bMg14i4jYjENOLTTPHe6htLlwsNghVAxN7euW5QPfKJcQ/b6RSApcZLCvCPHBk/LAZhoBl8KJSUnIVmNKfBSjjGI/2tIQGCVp/clNRF/mjlK9CZAHnEjGe8/dXMBdTbM7DxSNFDZVRELG/WqVuWXA88jXi0kNRqG8f2Nb3jQxttX7SIoOtFy6vTNWX+8S1DbJcrB2a5Gc/3kWCEkGyu59QAPXnyw/zXN3RMaVmWHJThWDpCnfe6LtAxSqhI4jpL2oi0H8VwnvVEW1axp5fULwzoB/1qudckSrhCCSqIuhk2EgN9VUQ4OwgzFvgH8cW2728YjuTeU5+clpubMINuxD9KsNveIxmAMRqQSFxroPRzEzqiElYkKOndC4laVB5pmo5tJwcSCniIAjjlJHt1wa+2EWQFfWTMPvtMqv21EmF4Vgmv188aMEEvn08y4HkmLp/6n1wjSYsGnY7qlNkAmPYvuxLBD7qpDtz2ME9crkzPm3QMenz6oqn3s8+sPFuM/4=",
-  "saved_at": "2026-05-21T15:52:44.297582"
+  "keys": [
+    {
+      "encrypted_group_key": "ivRuteetfQQbHjofK/VoY1JRWBuFZO/y8U4OEXnOxD4RwgON9cpe02tm8us/f4J5102Q7biwJ5liKhbhe01yR2eptHISvgC3vn77oojzsGkYqwCbM0RwZBkL5wEkQcnbcCRHoZM7Qa0a3kZjQeJnsNeMB3mlWBryj4nSt8vMm/bMg14i4jYjENOLTTPHe6htLlwsNghVAxN7euW5QPfKJcQ/b6RSApcZLCvCPHBk/LAZhoBl8KJSUnIVmNKfBSjjGI/2tIQGCVp/clNRF/mjlK9CZAHnEjGe8/dXMBdTbM7DxSNFDZVRELG/WqVuWXA88jXi0kNRqG8f2Nb3jQxttX7SIoOtFy6vTNWX+8S1DbJcrB2a5Gc/3kWCEkGyu59QAPXnyw/zXN3RMaVmWHJThWDpCnfe6LtAxSqhI4jpL2oi0H8VwnvVEW1axp5fULwzoB/1qudckSrhCCSqIuhk2EgN9VUQ4OwgzFvgH8cW2728YjuTeU5+clpubMINuxD9KsNveIxmAMRqQSFxroPRzEzqiElYkKOndC4laVB5pmo5tJwcSCniIAjjlJHt1wa+2EWQFfWTMPvtMqv21EmF4Vgmv188aMEEvn08y4HkmLp/6n1wjSYsGnY7qlNkAmPYvuxLBD7qpDtz2ME9crkzPm3QMenz6oqn3s8+sPFuM/4=",
+      "saved_at": "2026-05-21T15:52:44.297582"
+    }
+  ]
 }

@@ -915,6 +915,12 @@ body {
 
 /* ========== UTILITY CLASSES ========== */
 /* Hidden class to hide elements */
+.modal.hidden {
+  /* Display none */
+  display: none;
+}
+
+/* Hidden class to hide elements */
 .hidden {
   /* Hide element completely */
   display: none !important;
@@ -1205,6 +1211,125 @@ body {
   height: 16px;
   /* Accent color for checkbox */
   accent-color: var(--primary);
+}
+
+/* Radio button label styling */
+.radio-label {
+  /* Display flex */
+  display: flex;
+  /* Align items center */
+  align-items: center;
+  /* Padding */
+  padding: 8px 0;
+  /* Text color */
+  color: var(--text-light);
+  /* Font size */
+  font-size: 13px;
+  /* Cursor pointer */
+  cursor: pointer;
+  /* Gap between radio and text */
+  gap: 8px;
+}
+
+/* Radio input styling */
+.radio-label input[type="radio"] {
+  /* Cursor pointer */
+  cursor: pointer;
+  /* Width and height */
+  width: 16px;
+  height: 16px;
+  /* Accent color for radio */
+  accent-color: var(--primary);
+}
+
+/* Modal styling */
+.modal {
+  /* Position fixed */
+  position: fixed;
+  /* Full coverage */
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Dark semi-transparent background */
+  background: rgba(0, 0, 0, 0.5);
+  /* Display flex for centering */
+  display: flex;
+  /* Center items */
+  align-items: center;
+  justify-content: center;
+  /* High z-index */
+  z-index: 1000;
+}
+
+/* Modal content styling */
+.modal-content {
+  /* White background */
+  background: var(--bg-light);
+  /* Padding */
+  padding: 24px;
+  /* Border radius */
+  border-radius: var(--radius);
+  /* Max width */
+  max-width: 400px;
+  /* Width 90% on mobile */
+  width: 90%;
+  /* Box shadow for depth */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Modal title */
+.modal-content h3 {
+  /* Margin */
+  margin: 0 0 12px 0;
+  /* Font size */
+  font-size: 18px;
+  /* Font weight */
+  font-weight: bold;
+  /* Color */
+  color: var(--text-dark);
+}
+
+/* Modal paragraph */
+.modal-content p {
+  /* Margin */
+  margin: 0 0 16px 0;
+  /* Font size */
+  font-size: 14px;
+  /* Color */
+  color: var(--text-light);
+}
+
+/* Modal body styling */
+.modal-body {
+  /* Margin bottom */
+  margin-bottom: 16px;
+  /* Max height for scrolling */
+  max-height: 300px;
+  /* Overflow auto */
+  overflow-y: auto;
+  /* Padding */
+  padding-right: 8px;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-dark);
+  color: var(--text-light);
+  margin-top: 8px;
+}
+
+/* Modal actions styling */
+.modal-actions {
+  /* Display flex */
+  display: flex;
+  /* Gap between buttons */
+  gap: 8px;
+  /* Justify end */
+  justify-content: flex-end;
 }
 
 /* Button size variations */

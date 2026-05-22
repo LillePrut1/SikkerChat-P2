@@ -226,14 +226,19 @@ def create_group_routes(app, crypto_routes, config):
             )
             
             # Prepare group key data
+            # Save creator's encrypted group key into the new `keys` array format
             group_key_data = {
                 "group_id": group_id,
                 "username": username,
-                "encrypted_group_key": encrypted_group_key,
-                "saved_at": datetime.now().isoformat()
+                "keys": [
+                    {
+                        "encrypted_group_key": encrypted_group_key,
+                        "saved_at": datetime.now().isoformat()
+                    }
+                ]
             }
             
-            # Save group key
+            # Save group key (writer will overwrite existing file)
             save_json(group_key_file, group_key_data)
             
             # Return success
@@ -367,17 +372,26 @@ def create_group_routes(app, crypto_routes, config):
                 data_config['GROUP_KEYS_DIR'],
                 f"{group_id}_{new_username}.json"
             )
-            
-            # Prepare data
-            group_key_data = {
-                "group_id": group_id,
-                "username": new_username,
+
+            # Load existing file and append to keys history
+            existing = load_json(group_key_file)
+            if not existing or not isinstance(existing, dict):
+                data = {
+                    "group_id": group_id,
+                    "username": new_username,
+                    "keys": []
+                }
+            else:
+                data = existing
+                if "keys" not in data or not isinstance(data.get("keys"), list):
+                    data["keys"] = []
+
+            data["keys"].append({
                 "encrypted_group_key": encrypted_group_key,
                 "saved_at": datetime.now().isoformat()
-            }
-            
-            # Save group key
-            save_json(group_key_file, group_key_data)
+            })
+
+            save_json(group_key_file, data)
             
             # Return success
             return jsonify({
@@ -498,15 +512,25 @@ def create_group_routes(app, crypto_routes, config):
                 )
                 
                 # Prepare data
-                group_key_data = {
-                    "group_id": group_id,
-                    "username": member_username,
+                # Load existing file and append to keys history
+                existing = load_json(group_key_file)
+                if not existing or not isinstance(existing, dict):
+                    data = {
+                        "group_id": group_id,
+                        "username": member_username,
+                        "keys": []
+                    }
+                else:
+                    data = existing
+                    if "keys" not in data or not isinstance(data.get("keys"), list):
+                        data["keys"] = []
+
+                data["keys"].append({
                     "encrypted_group_key": encrypted_key,
                     "saved_at": datetime.now().isoformat()
-                }
-                
-                # Save rotated key
-                save_json(group_key_file, group_key_data)
+                })
+
+                save_json(group_key_file, data)
             
             # Return success
             return jsonify({
@@ -778,6 +802,75 @@ def create_group_routes(app, crypto_routes, config):
         except Exception as e:
             # Log error
             print(f"Error getting messages: {str(e)}")
+            # Return error
+            return jsonify({"message": "Server error"}), 500
+
+    @app.route("/group_info", methods=["GET"])
+    def get_group_info_secure():
+        """
+        Get group metadata and member list
+        Used for displaying member management controls with proper permissions
+        """
+        # Get token from query parameter
+        token = request.args.get("token")
+        # Get group ID from query parameter
+        group_id = request.args.get("group_id")
+        
+        if not token or not group_id:
+            # Return error
+            return jsonify({"message": "token and group_id required"}), 400
+        
+        # Validate token to get username
+        username = validate_token(token)
+        if not username:
+            # Return error
+            return jsonify({"message": "Invalid token"}), 401
+        
+        try:
+            # Check if user is member of group
+            if not is_group_member(group_id, username):
+                # Return error
+                return jsonify({"message": "User not member of group"}), 403
+            
+            # Load group data
+            group_file = os.path.join(
+                data_config['GROUPS_DIR'],
+                f"{group_id}.json"
+            )
+            group_data = load_json(group_file)
+            
+            if not group_data:
+                # Return error
+                return jsonify({"message": "Group not found"}), 404
+            
+            # Load member list from group metadata, fallback to membership files
+            members = group_data.get("members")
+            if members is None:
+                members = []
+                for filename in os.listdir(data_config['MEMBERSHIPS_DIR']):
+                    if not filename.endswith('.json'):
+                        continue
+                    user = os.path.splitext(filename)[0]
+                    membership_file = os.path.join(data_config['MEMBERSHIPS_DIR'], filename)
+                    membership_data = load_json(membership_file)
+                    if group_id in membership_data.get('groups', []):
+                        members.append(user)
+
+            # Get user's role
+            user_role = get_user_group_role(group_id, username)
+
+            # Return group info
+            return jsonify({
+                "group_id": group_id,
+                "group_name": group_data.get("name", group_data.get("group_name", "Unknown")),
+                "creator": group_data.get("creator", "Unknown"),
+                "role": user_role,
+                "members": members
+            }), 200
+        
+        except Exception as e:
+            # Log error
+            print(f"Error getting group info: {str(e)}")
             # Return error
             return jsonify({"message": "Server error"}), 500
 

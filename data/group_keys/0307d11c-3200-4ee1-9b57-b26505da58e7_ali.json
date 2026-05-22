@@ -1,6 +1,10 @@
 {
   "group_id": "0307d11c-3200-4ee1-9b57-b26505da58e7",
   "username": "ali",
-  "encrypted_group_key": "b0rwuzneGi7Ah50CHSHKiuQCnaTkUcY3u7W3c/ydmSIaL/IUZoGwsRDDsbS0pJLbi01NuXBmDvIpXz/GP5GX3mpp0srqLR04nqX/TvavSpkeFb007BBISDPUfzyOCPlde5umR7WfFEyjy/kgW3pEemRC65xp2kuatg3eIOZUUI01y/XOymVDEUAZp6ebKzVQ6mNr/6EcNnNhWukTlkzxyfdH4F9ICe/bmB/z6Y6UFUZKxr075jpQ6q8NSOypmcxqctyAqayI+1Zdb+v+yarcusIdt+gZDpp2pecaE0qX2+kw3ddOB90dT10qknSzHKfU1PLP4nhMQylAt+87Ucvi4Oc9ksjnyfWJakZrfdXKUuJPkNPVG0bf/TNAjAuBDIztwjhToWtTmXHM7eAvAoK000pZaA5OFSc1xd/bT0xH8kgSwJOcyKcZwuLGq5JtvUk4YlK7vsji91SmmY2bCIWQxM3QPKIV/+CnaP9FMfqJoqT6b5Gd+ncBkuxT3o1nGY8jtDeDQUTAEw5+p5T3igKMTA8NTsQvOhoMan8WaJlVcmZxQ378/IQfFWEvBn9ZWiQF2YclFIeyTO1ah2jiofPp8e6ApIx9fd+ZIQxvkTL8ZG8rXfR/3yj+H/W3JRWITPy/spQlprYe72ztIuXT/DqNtePWc9kJKp3nqSBMTCmkwbI=",
-  "saved_at": "2026-05-20T01:08:12.825115"
+  "keys": [
+    {
+      "encrypted_group_key": "b0rwuzneGi7Ah50CHSHKiuQCnaTkUcY3u7W3c/ydmSIaL/IUZoGwsRDDsbS0pJLbi01NuXBmDvIpXz/GP5GX3mpp0srqLR04nqX/TvavSpkeFb007BBISDPUfzyOCPlde5umR7WfFEyjy/kgW3pEemRC65xp2kuatg3eIOZUUI01y/XOymVDEUAZp6ebKzVQ6mNr/6EcNnNhWukTlkzxyfdH4F9ICe/bmB/z6Y6UFUZKxr075jpQ6q8NSOypmcxqctyAqayI+1Zdb+v+yarcusIdt+gZDpp2pecaE0qX2+kw3ddOB90dT10qknSzHKfU1PLP4nhMQylAt+87Ucvi4Oc9ksjnyfWJakZrfdXKUuJPkNPVG0bf/TNAjAuBDIztwjhToWtTmXHM7eAvAoK000pZaA5OFSc1xd/bT0xH8kgSwJOcyKcZwuLGq5JtvUk4YlK7vsji91SmmY2bCIWQxM3QPKIV/+CnaP9FMfqJoqT6b5Gd+ncBkuxT3o1nGY8jtDeDQUTAEw5+p5T3igKMTA8NTsQvOhoMan8WaJlVcmZxQ378/IQfFWEvBn9ZWiQF2YclFIeyTO1ah2jiofPp8e6ApIx9fd+ZIQxvkTL8ZG8rXfR/3yj+H/W3JRWITPy/spQlprYe72ztIuXT/DqNtePWc9kJKp3nqSBMTCmkwbI=",
+      "saved_at": "2026-05-20T01:08:12.825115"
+    }
+  ]
 }
