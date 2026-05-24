@@ -1993,7 +1993,6 @@ async function loadMessages(chatName) {
 
 async function renderMessages() {
   const messageContainer = document.getElementById("messageContainer");
-  messageContainer.innerHTML = "";
 
   // Get group key for current chat
   let groupKey = groupKeys[currentChatName];
@@ -2067,6 +2066,7 @@ async function renderMessages() {
     return { msg, displayText };
   }));
 
+  const fragment = document.createDocumentFragment();
   for (let entry of messageEntries) {
     const msg = entry.msg;
     const displayText = entry.displayText;
@@ -2095,8 +2095,10 @@ async function renderMessages() {
     messageDiv.appendChild(senderDiv);
     messageDiv.appendChild(textDiv);
     messageDiv.appendChild(timeDiv);
-    messageContainer.appendChild(messageDiv);
+    fragment.appendChild(messageDiv);
   }
+
+  messageContainer.replaceChildren(fragment);
 
   requestAnimationFrame(() => {
     messageContainer.scrollTop = messageContainer.scrollHeight;
