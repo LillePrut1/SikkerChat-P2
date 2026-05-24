@@ -992,7 +992,7 @@ ROUTE_CONFIG = {
     'MEMBERSHIPS_DIR': MEMBERSHIPS_DIR,
     'ROLES_DIR': ROLES_DIR,
     'MESSAGES_DIR': MESSAGES_DIR,
-    'API_BASE': 'http://localhost:5000'
+    'API_BASE': 'https://sikkerchat-p2.onrender.com'
 }
 
 # Initialize crypto routes (public key distribution, group key management)
