@@ -2010,44 +2010,28 @@ async function renderMessages() {
     }
   }
 
-  for (let msg of appState.currentMessages) {
-    const messageDiv = document.createElement("div");
-    messageDiv.className = "message";
-
-    const senderName = msg.sender || msg.from || "Unknown";
-    if (senderName === currentUsername) {
-      messageDiv.classList.add("own");
-    }
-
-    const senderDiv = document.createElement("div");
-    senderDiv.className = "message-sender";
-    senderDiv.textContent = senderName;
-
-    const textDiv = document.createElement("div");
-    textDiv.className = "message-text";
-
-    // Decrypt message if we have ciphertext and nonce
-    let displayText = "[Unable to decrypt message]";
+  const messageEntries = await Promise.all(appState.currentMessages.map(async (msg) => {
     const ciphertextValue = msg.ciphertext || msg.encrypted_message || msg.text;
     const nonceValue = msg.nonce;
+    let displayText = "[Unable to decrypt message]";
+
     if (ciphertextValue && nonceValue && groupKey) {
       try {
-        // Decrypt the message using the group key
         let decryptedText = null;
         try {
-          decryptedText = await CryptoModule.decryptMessage(ciphertextValue, msg.nonce, groupKey);
+          decryptedText = await CryptoModule.decryptMessage(ciphertextValue, nonceValue, groupKey);
         } catch (primaryDecryptErr) {
-          // Try historical keys if available
           const history = groupKeysHistory[currentChatName] || [];
           for (let histKey of history) {
             try {
-              decryptedText = await CryptoModule.decryptMessage(ciphertextValue, msg.nonce, histKey);
+              decryptedText = await CryptoModule.decryptMessage(ciphertextValue, nonceValue, histKey);
               if (decryptedText) break;
             } catch (e) {
               continue;
             }
           }
         }
+
         if (decryptedText) {
           displayText = decryptedText;
         } else {
@@ -2058,7 +2042,7 @@ async function renderMessages() {
           try {
             const senderSigningPublicKey = await fetchUserPublicKey(msg.sender, 'signature');
             if (senderSigningPublicKey) {
-              const messageToVerify = `${ciphertextValue}:${msg.nonce}`;
+              const messageToVerify = `${ciphertextValue}:${nonceValue}`;
               const validSignature = await CryptoModule.verifySignature(
                 messageToVerify,
                 msg.signature,
@@ -2077,11 +2061,30 @@ async function renderMessages() {
         displayText = "[Decryption failed]";
       }
     } else if (msg.text) {
-      // Fallback for plaintext messages or legacy stored data
       displayText = msg.text;
     }
 
-    // Sanitize the decrypted text before displaying
+    return { msg, displayText };
+  }));
+
+  for (let entry of messageEntries) {
+    const msg = entry.msg;
+    const displayText = entry.displayText;
+
+    const messageDiv = document.createElement("div");
+    messageDiv.className = "message";
+
+    const senderName = msg.sender || msg.from || "Unknown";
+    if (senderName === currentUsername) {
+      messageDiv.classList.add("own");
+    }
+
+    const senderDiv = document.createElement("div");
+    senderDiv.className = "message-sender";
+    senderDiv.textContent = senderName;
+
+    const textDiv = document.createElement("div");
+    textDiv.className = "message-text";
     textDiv.textContent = displayText;
 
     const timeDiv = document.createElement("div");
@@ -2095,7 +2098,6 @@ async function renderMessages() {
     messageContainer.appendChild(messageDiv);
   }
 
-  // Use requestAnimationFrame to ensure DOM has been painted before scrolling
   requestAnimationFrame(() => {
     messageContainer.scrollTop = messageContainer.scrollHeight;
   });
