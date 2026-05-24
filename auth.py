@@ -180,11 +180,26 @@ def group_admin_required(f):
 
 # ========== MEMBERSHIP VERIFICATION ==========
 
+def resolve_user_membership_file(username):
+    """Resolve membership file path case-insensitively for a username."""
+    exact_path = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
+    if os.path.exists(exact_path):
+        return exact_path
+    lower_path = os.path.join(MEMBERSHIPS_DIR, f"{username.lower()}.json")
+    if os.path.exists(lower_path):
+        return lower_path
+    if os.path.exists(MEMBERSHIPS_DIR):
+        for filename in os.listdir(MEMBERSHIPS_DIR):
+            if filename.lower() == f"{username.lower()}.json":
+                return os.path.join(MEMBERSHIPS_DIR, filename)
+    return exact_path
+
+
 def is_group_member(username, group_id):
     """Check if user is member of group"""
     try:
         # Load membership file for user
-        membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
+        membership_file = resolve_user_membership_file(username)
         
         # Check if file exists
         if not os.path.exists(membership_file):

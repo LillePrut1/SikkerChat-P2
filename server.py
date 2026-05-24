@@ -185,9 +185,66 @@ def save_users(users):
     save_json(USERS_FILE, users)
 
 
+def resolve_username(username):
+    """Resolve username to the exact stored username casing."""
+    if not username or not isinstance(username, str):
+        return username
+    users = load_users()
+    for stored_username in users.keys():
+        if stored_username.lower() == username.lower():
+            return stored_username
+    return username
+
+
+def resolve_user_file_path(directory, username):
+    """Resolve a file path for a username in a directory, case-insensitively."""
+    exact_path = os.path.join(directory, f"{username}.json")
+    if os.path.exists(exact_path):
+        return exact_path
+
+    resolved_username = resolve_username(username)
+    if resolved_username and resolved_username != username:
+        resolved_path = os.path.join(directory, f"{resolved_username}.json")
+        if os.path.exists(resolved_path):
+            return resolved_path
+
+    lower_path = os.path.join(directory, f"{username.lower()}.json")
+    if os.path.exists(lower_path):
+        return lower_path
+
+    if os.path.exists(directory):
+        for filename in os.listdir(directory):
+            if filename.lower() == f"{username.lower()}.json":
+                return os.path.join(directory, filename)
+    return exact_path
+
+
+def resolve_group_key_file(group_id, username):
+    """Resolve the group key filename for a given user, handling case-insensitive usernames."""
+    exact_path = os.path.join(GROUP_KEYS_DIR, f"{group_id}_{username}.json")
+    if os.path.exists(exact_path):
+        return exact_path
+
+    resolved_username = resolve_username(username)
+    if resolved_username and resolved_username != username:
+        resolved_path = os.path.join(GROUP_KEYS_DIR, f"{group_id}_{resolved_username}.json")
+        if os.path.exists(resolved_path):
+            return resolved_path
+
+    lower_path = os.path.join(GROUP_KEYS_DIR, f"{group_id}_{username.lower()}.json")
+    if os.path.exists(lower_path):
+        return lower_path
+
+    if os.path.exists(GROUP_KEYS_DIR):
+        for filename in os.listdir(GROUP_KEYS_DIR):
+            if filename.lower() == f"{group_id}_{username.lower()}.json":
+                return os.path.join(GROUP_KEYS_DIR, filename)
+    return exact_path
+
+
 def save_group_key(group_id, username, encrypted_group_key):
     """Save encrypted group key for a specific user and group"""
-    group_key_file = os.path.join(GROUP_KEYS_DIR, f"{group_id}_{username}.json")
+    group_key_file = resolve_group_key_file(group_id, username)
     # Maintain history of keys for this user+group
     existing = load_json(group_key_file)
     if not existing or not isinstance(existing, dict):
@@ -211,7 +268,7 @@ def save_group_key(group_id, username, encrypted_group_key):
 
 def load_group_key(group_id, username):
     """Load encrypted group key for a specific user and group"""
-    group_key_file = os.path.join(GROUP_KEYS_DIR, f"{group_id}_{username}.json")
+    group_key_file = resolve_group_key_file(group_id, username)
     data = load_json(group_key_file)
     # Return list of keys (may be empty)
     return data.get("keys", [])
@@ -259,7 +316,7 @@ def require_auth(f):
 
 def check_membership(username, group_id):
     """Verify that user is a member of specified group"""
-    membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
+    membership_file = resolve_user_file_path(MEMBERSHIPS_DIR, username)
     memberships = load_json(membership_file)
     if "groups" in memberships:
         if group_id in memberships["groups"]:
@@ -295,11 +352,10 @@ def find_group_id_by_name(group_name):
 
 def are_friends(user1, user2):
     """Verify two users are friends with each other"""
-    user1_lower = user1.lower()
-    user2_lower = user2.lower()
-    user1_file = os.path.join(FRIENDS_DIR, f"{user1_lower}.json")
+    normalized_user2 = user2.lower()
+    user1_file = resolve_user_file_path(FRIENDS_DIR, user1)
     user1_data = load_json(user1_file)
-    if user2_lower in [f.lower() for f in user1_data.get("friends", [])]:
+    if normalized_user2 in [f.lower() for f in user1_data.get("friends", [])]:
         return True
     return False
 
@@ -495,10 +551,10 @@ def send_friend_request(username):
     if username.lower() == target_user_key.lower():
         return jsonify({"message": "Cannot send friend request to yourself"}), 400
     
-    requester_file = os.path.join(FRIENDS_DIR, f"{username}.json")
+    requester_file = resolve_user_file_path(FRIENDS_DIR, username)
     requester_data = load_json(requester_file)
     
-    target_file = os.path.join(FRIENDS_DIR, f"{target_user_key}.json")
+    target_file = resolve_user_file_path(FRIENDS_DIR, target_user_key)
     target_data = load_json(target_file)
     
     friends_lower = [f.lower() for f in requester_data.get("friends", [])]
@@ -525,7 +581,7 @@ def send_friend_request(username):
 @require_auth
 def get_friend_requests(username):
     """Get incoming requests, outgoing requests, and friends list"""
-    friend_file = os.path.join(FRIENDS_DIR, f"{username}.json")
+    friend_file = resolve_user_file_path(FRIENDS_DIR, username)
     friend_data = load_json(friend_file)
     
     return jsonify({
@@ -597,10 +653,10 @@ def accept_friend_request(username):
     if not requester:
         return jsonify({"message": "Requester username required"}), 400
     
-    acceptor_file = os.path.join(FRIENDS_DIR, f"{username}.json")
+    acceptor_file = resolve_user_file_path(FRIENDS_DIR, username)
     acceptor_data = load_json(acceptor_file)
     
-    requester_file = os.path.join(FRIENDS_DIR, f"{requester}.json")
+    requester_file = resolve_user_file_path(FRIENDS_DIR, requester)
     requester_data = load_json(requester_file)
     
     incoming_lower = [f.lower() for f in acceptor_data.get("incoming_requests", [])]
@@ -642,10 +698,10 @@ def reject_friend_request(username):
     if not requester:
         return jsonify({"message": "Requester username required"}), 400
     
-    rejector_file = os.path.join(FRIENDS_DIR, f"{username}.json")
+    rejector_file = resolve_user_file_path(FRIENDS_DIR, username)
     rejector_data = load_json(rejector_file)
     
-    requester_file = os.path.join(FRIENDS_DIR, f"{requester}.json")
+    requester_file = resolve_user_file_path(FRIENDS_DIR, requester)
     requester_data = load_json(requester_file)
     
     incoming_lower = [f.lower() for f in rejector_data.get("incoming_requests", [])]
@@ -677,7 +733,7 @@ def reject_friend_request(username):
 @require_auth
 def get_rooms(username):
     """Get all groups user is member of"""
-    membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
+    membership_file = resolve_user_file_path(MEMBERSHIPS_DIR, username)
     memberships = load_json(membership_file)
     
     group_ids = memberships.get("groups", [])
@@ -809,7 +865,7 @@ def add_group(username):
     group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
     save_json(group_file, group_data)
     
-    membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
+    membership_file = resolve_user_file_path(MEMBERSHIPS_DIR, username)
     memberships = load_json(membership_file)
     
     if "groups" not in memberships:
@@ -845,7 +901,7 @@ def add_group(username):
         if not are_friends(username, member_key):
             continue
         
-        member_file = os.path.join(MEMBERSHIPS_DIR, f"{member_key}.json")
+        member_file = resolve_user_file_path(MEMBERSHIPS_DIR, member_key)
         member_data = load_json(member_file)
         
         if "groups" not in member_data:
@@ -946,7 +1002,7 @@ def leave_group(username):
     group_file = os.path.join(GROUPS_DIR, f"{group_id}.json")
     group_data = load_json(group_file)
     
-    membership_file = os.path.join(MEMBERSHIPS_DIR, f"{username}.json")
+    membership_file = resolve_user_file_path(MEMBERSHIPS_DIR, username)
     membership_data = load_json(membership_file)
     
     if group_id in membership_data.get("groups", []):

@@ -53,6 +53,41 @@ def save_json(file_path, data):
         # Log error
         print(f"Error saving JSON to {file_path}: {str(e)}")
 
+
+def resolve_username(username):
+    """Resolve username to the exact stored casing in users.json."""
+    if not username or not isinstance(username, str):
+        return username
+    users = load_json(data_config['USERS_FILE'])
+    for stored_username in users.keys():
+        if stored_username.lower() == username.lower():
+            return stored_username
+    return username
+
+
+def resolve_group_key_file(group_id, username):
+    """Resolve the group key file path for a username in the group_keys directory."""
+    exact_path = os.path.join(data_config['GROUP_KEYS_DIR'], f"{group_id}_{username}.json")
+    if os.path.exists(exact_path):
+        return exact_path
+
+    resolved_username = resolve_username(username)
+    if resolved_username and resolved_username != username:
+        resolved_path = os.path.join(data_config['GROUP_KEYS_DIR'], f"{group_id}_{resolved_username}.json")
+        if os.path.exists(resolved_path):
+            return resolved_path
+
+    lower_path = os.path.join(data_config['GROUP_KEYS_DIR'], f"{group_id}_{username.lower()}.json")
+    if os.path.exists(lower_path):
+        return lower_path
+
+    if os.path.exists(data_config['GROUP_KEYS_DIR']):
+        for filename in os.listdir(data_config['GROUP_KEYS_DIR']):
+            if filename.lower() == f"{group_id}_{username.lower()}.json":
+                return os.path.join(data_config['GROUP_KEYS_DIR'], filename)
+    return exact_path
+
+
 def validate_token(token):
     """Validate session token and return username"""
     # Check if token provided
@@ -237,10 +272,7 @@ def create_crypto_routes(app, auth_module, config):
         
         try:
             # Build file path for group key
-            group_key_file = os.path.join(
-                data_config['GROUP_KEYS_DIR'],
-                f"{group_id}_{username}.json"
-            )
+            group_key_file = resolve_group_key_file(group_id, username)
 
             # Load existing structure and append key to history
             existing = load_json(group_key_file)
@@ -296,10 +328,7 @@ def create_crypto_routes(app, auth_module, config):
         
         try:
             # Build file path for group key
-            group_key_file = os.path.join(
-                data_config['GROUP_KEYS_DIR'],
-                f"{group_id}_{username}.json"
-            )
+            group_key_file = resolve_group_key_file(group_id, username)
 
             # Check if file exists
             if not os.path.exists(group_key_file):
