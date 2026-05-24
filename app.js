@@ -1979,12 +1979,20 @@ async function loadMessages(chatName) {
     
     // Check if we have new messages or if existing messages changed
     if (newMessageCount !== lastMessageCount || currentLastMessageId !== lastMessageId) {
+      const oldMessages = appState.currentMessages || [];
+      const isAppendOnly = oldMessages.length === lastMessageCount 
+        && newMessageCount === lastMessageCount + 1 
+        && oldMessages.every((msg, index) => msg.id === newMessages[index].id);
+
       appState.currentMessages = newMessages;
       lastMessageCount = newMessageCount;
       lastMessageId = currentLastMessageId;
-      
-      // renderMessages is now async due to decryption
-      await renderMessages();
+
+      if (isAppendOnly) {
+        await appendNewMessages(newMessages.slice(-1));
+      } else {
+        await renderMessages();
+      }
     }
   } catch (error) {
     console.error("Error loading messages:", error);
@@ -2068,38 +2076,127 @@ async function renderMessages() {
 
   const fragment = document.createDocumentFragment();
   for (let entry of messageEntries) {
-    const msg = entry.msg;
-    const displayText = entry.displayText;
-
-    const messageDiv = document.createElement("div");
-    messageDiv.className = "message";
-
-    const senderName = msg.sender || msg.from || "Unknown";
-    if (senderName === currentUsername) {
-      messageDiv.classList.add("own");
-    }
-
-    const senderDiv = document.createElement("div");
-    senderDiv.className = "message-sender";
-    senderDiv.textContent = senderName;
-
-    const textDiv = document.createElement("div");
-    textDiv.className = "message-text";
-    textDiv.textContent = displayText;
-
-    const timeDiv = document.createElement("div");
-    timeDiv.className = "message-timestamp";
-    const timestamp = new Date(msg.timestamp);
-    timeDiv.textContent = timestamp.toLocaleTimeString();
-
-    messageDiv.appendChild(senderDiv);
-    messageDiv.appendChild(textDiv);
-    messageDiv.appendChild(timeDiv);
-    fragment.appendChild(messageDiv);
+    fragment.appendChild(buildMessageElement(entry.msg, entry.displayText));
   }
 
   messageContainer.replaceChildren(fragment);
 
+  requestAnimationFrame(() => {
+    messageContainer.scrollTop = messageContainer.scrollHeight;
+  });
+}
+
+function buildMessageElement(msg, displayText) {
+  const messageDiv = document.createElement("div");
+  messageDiv.className = "message";
+
+  const senderName = msg.sender || msg.from || "Unknown";
+  if (senderName === currentUsername) {
+    messageDiv.classList.add("own");
+  }
+
+  const senderDiv = document.createElement("div");
+  senderDiv.className = "message-sender";
+  senderDiv.textContent = senderName;
+
+  const textDiv = document.createElement("div");
+  textDiv.className = "message-text";
+  textDiv.textContent = displayText;
+
+  const timeDiv = document.createElement("div");
+  timeDiv.className = "message-timestamp";
+  const timestamp = new Date(msg.timestamp);
+  timeDiv.textContent = timestamp.toLocaleTimeString();
+
+  messageDiv.appendChild(senderDiv);
+  messageDiv.appendChild(textDiv);
+  messageDiv.appendChild(timeDiv);
+  return messageDiv;
+}
+
+async function appendNewMessages(newMessages) {
+  if (!newMessages || newMessages.length === 0) {
+    return;
+  }
+
+  const messageContainer = document.getElementById("messageContainer");
+
+  let groupKey = groupKeys[currentChatName];
+  if (!groupKey) {
+    try {
+      groupKey = await loadGroupKeyForChat(currentChatName, currentChatId);
+      if (groupKey) {
+        groupKeys[currentChatName] = groupKey;
+      }
+    } catch (error) {
+      console.error("Failed to load group key for decryption:", error);
+      return;
+    }
+  }
+
+  const messageEntries = await Promise.all(newMessages.map(async (msg) => {
+    const ciphertextValue = msg.ciphertext || msg.encrypted_message || msg.text;
+    const nonceValue = msg.nonce;
+    let displayText = "[Unable to decrypt message]";
+
+    if (ciphertextValue && nonceValue && groupKey) {
+      try {
+        let decryptedText = null;
+        try {
+          decryptedText = await CryptoModule.decryptMessage(ciphertextValue, nonceValue, groupKey);
+        } catch (primaryDecryptErr) {
+          const history = groupKeysHistory[currentChatName] || [];
+          for (let histKey of history) {
+            try {
+              decryptedText = await CryptoModule.decryptMessage(ciphertextValue, nonceValue, histKey);
+              if (decryptedText) break;
+            } catch (e) {
+              continue;
+            }
+          }
+        }
+
+        if (decryptedText) {
+          displayText = decryptedText;
+        } else {
+          displayText = "[Decryption failed]";
+        }
+
+        if (msg.signature) {
+          try {
+            const senderSigningPublicKey = await fetchUserPublicKey(msg.sender, 'signature');
+            if (senderSigningPublicKey) {
+              const messageToVerify = `${ciphertextValue}:${nonceValue}`;
+              const validSignature = await CryptoModule.verifySignature(
+                messageToVerify,
+                msg.signature,
+                senderSigningPublicKey
+              );
+              if (!validSignature) {
+                displayText = `[Invalid signature] ${displayText}`;
+              }
+            }
+          } catch (verifyError) {
+            console.warn('Signature verification failed for', msg.sender, verifyError);
+          }
+        }
+      } catch (decryptError) {
+        console.error("Error decrypting message:", decryptError);
+        displayText = "[Decryption failed]";
+      }
+    } else if (msg.text) {
+      displayText = msg.text;
+    }
+
+    return { msg, displayText };
+  }));
+
+  const fragment = document.createDocumentFragment();
+  for (let entry of messageEntries) {
+    fragment.appendChild(buildMessageElement(entry.msg, entry.displayText));
+  }
+
+  messageContainer.appendChild(fragment);
   requestAnimationFrame(() => {
     messageContainer.scrollTop = messageContainer.scrollHeight;
   });
