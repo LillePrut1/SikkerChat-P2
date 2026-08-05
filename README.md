@@ -2,38 +2,38 @@
 
 **A secure, friend-based group chat system built with Flask, Vanilla JavaScript, and JSON storage.**
 
-## 🎯 What is SikkerChat?
+##  What is SikkerChat?
 
 SikkerChat is a real-time group chat application that emphasizes **security through friend-based permissions**. Users must establish friendships before creating groups together, ensuring controlled and consensual communication.
 
-## ✨ Key Features
+##  Key Features
 
-### 👥 Friend System
+###  Friend System
 - Send friend requests to other users
 - Accept or reject friend requests
 - Maintain a friend list
 - Track incoming and outgoing requests
 
-### 👫 Secure Group Creation
+###  Secure Group Creation
 - Create groups only with existing friends
 - Non-friends cannot be added (even if entered)
 - All group members must be friends of creator
 - Full control over who can join your groups
 
-### 💬 Real-Time Messaging
+###  Real-Time Messaging
 - Send and receive messages in group chats
 - Message history with timestamps
 - Easy group switching
 - Leave groups at any time
 
-### 🔐 Security Features
+### Security Features
 - Bcrypt password hashing
 - Secure token-based authentication
 - Membership validation on all operations
 - Permission-based access control
 - No unauthorized access possible
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - Python 3.7+
@@ -121,7 +121,7 @@ SikkerChat-P22/
 
 **See SECURE_ARCHITECTURE.md for complete endpoint documentation.**
 
-## 🔐 Security
+##  Security
 
 ### Authentication
 - ✅ Bcrypt password hashing
@@ -141,7 +141,7 @@ SikkerChat-P22/
 - ✅ Member existence validation
 - ✅ Friend list verification
 
-## 🏗️ Architecture
+##  Architecture
 
 ### Technology Stack
 - **Backend:** Flask (Python)
@@ -173,7 +173,7 @@ SikkerChat-P22/
 7. Leave or Delete Groups
 ```
 
-## 🐛 Bug Fixes (v2.0)
+##  Bug Fixes (v2.0)
 
 - ✅ Fixed chat view flicker
 - ✅ Fixed message input disappearance
@@ -182,7 +182,7 @@ SikkerChat-P22/
 - ✅ Fixed event listener duplication
 - ✅ Fixed async race conditions
 
-## 📝 File Descriptions
+##  File Descriptions
 
 ### Backend
 - **server.py** (750 lines)
@@ -221,7 +221,7 @@ SikkerChat-P22/
 - **memberships/{username}.json** - User's group memberships
 - **messages/{group_id}.json** - Chat history per group
 
-## 🧪 Testing
+##  Testing
 
 ### Manual Testing
 Follow the scenarios in **QUICKSTART.md**:
@@ -238,7 +238,7 @@ See **VERIFICATION_CHECKLIST.md** for:
 - Security feature checklist
 - Feature completeness
 
-## 💾 Data Format
+##  Data Format
 
 ### Friend File Example
 ```json
@@ -288,7 +288,7 @@ See **VERIFICATION_CHECKLIST.md** for:
 - Check data/ directory for file creation
 - Use browser DevTools network tab
 
-## 🚀 Performance
+##  Performance
 
 - ~30% faster state updates vs v1
 - Reduced API calls through batching
@@ -309,11 +309,11 @@ See **VERIFICATION_CHECKLIST.md** for:
 - [ ] Rate limiting
 - [ ] Token expiration
 
-## ⚖️ License
+##  License
 
 Educational project for learning purposes.
 
-## 👨‍💻 Credits
+##  Credits
 
 Built as a demonstration of:
 - Secure chat architecture
@@ -322,7 +322,7 @@ Built as a demonstration of:
 - Flask REST API design
 - Real-time communication
 
-## 📞 Support
+##  Support
 
 ### For Setup Issues
 - Check requirements.txt dependencies
@@ -348,11 +348,3 @@ Built as a demonstration of:
 **Status:** Production Ready (Local)  
 **Last Updated:** April 25, 2026-P2
 En sikker chatapplication som produkt i P2
-
-Der skal laves backend i python. Frontend skal laves (Umiddelbart) i HTML og Javasript, og pyntes med CSS
-
-Lige PT er der oprettet nogle brugere i user.json i vores backend.
-
-Deres passwords er SHA256-hash af "Password123" UDEN SALT, det er gemt som "password_hash". 
-De indskrives i index.html og returneres som "password" (dette skal hashes, og gemmes/tjekkes i ./data/user.json)
-Brugernavn returneres som "username"
