@@ -1,0 +1,27 @@
+TESTING PROCEDURE:
+
+1. Hard Refresh: Ctrl+Shift+R
+2. Open Console: F12 → Console tab (keep it open)
+3. Go to: http://127.0.0.1:5500/index.html
+4. Click "Register"
+5. Fill in:
+   - Username: testfresh
+   - Password: Pass123
+   - Confirm: Pass123
+6. Click Register
+7. Watch console for [savePrivateKey] messages
+8. Click OK
+9. Click Login
+10. Fill in SAME username and password
+11. Click Login
+12. Watch console for [loadPrivateKey] messages
+
+EXPECTED:
+✅ See chat dashboard
+✅ Can send messages
+✅ Logout/login again works
+
+IF FAILS:
+❌ See error in console
+❌ Copy console output (Ctrl+A, Ctrl+C)
+❌ Send it to me
